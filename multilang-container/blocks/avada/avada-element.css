@@ -1,0 +1,113 @@
+.mock_container{
+    display: none !important;
+    height: 0 !important;
+    width: 0 !important;
+    overflow: hidden;
+    position: fixed !important;
+    pointer-events: none;
+}
+
+.mock-modal-hide{
+    display: none !important;
+}
+
+/* Hide the default Avada module text for the multilang element */
+
+    .multilang_avada > p{
+        display: none !important;
+    }
+
+/* Hide the marker column inside the multilang Avada element */
+    .multilang_avada .multilang-marker-column{
+        display: none !important;
+    }
+
+/* Hide the default Avada module settings and modal for the multilang element */
+
+    .fusion-builder-module-settings.multilang_avada,
+    .fusion-builder-modal-container div[data-element_type=multilang_avada]{
+        display: none;
+    }
+    .multilang_avada .fusion-builder-column{
+        pointer-events: none !important;
+    }
+    .multilang_avada .multilang-column *{
+        pointer-events: all !important;
+    }
+    .multilang_avada .fusion-builder-settings,
+    .multilang_avada .fusion-builder-layout-handle{
+        pointer-events: all !important;
+    }
+    .multilang_avada .multilang-column > .fusion-builder-controls > a{
+        display: none !important;
+        pointer-events: none !important;
+    }
+
+/* Allow move cursor on draggable module blocks inside the column */
+
+    .multilang_avada .multilang-column{
+        cursor: default !important;
+    }
+    .multilang_avada .multilang-column .fusion_module_block,
+    .multilang_avada .multilang-column .fusion-builder-column-element{
+        cursor: move !important;
+    }
+
+.multilang_avada .multilang-column .multilang-lang-badge{
+    position: absolute;
+    right: 1em;
+    top: 1em;
+}   
+.multilang_avada .multilang-column .multilang-lang-badge .multilang-text{
+    display: none;
+}
+.multilang_avada .multilang-column .multilang-lang-badge .multilang-flag{
+    display: block;
+    width: 1.5em;
+    height: 1.5em;
+    background-repeat: no-repeat;
+    border-radius: 20em;
+}
+.multilang_avada .multilang-column:hover .multilang-lang-badge .multilang-text{
+    display: block;
+}
+.multilang_avada .multilang-column:hover .multilang-lang-badge .multilang-flag{
+    display: none;
+}
+
+.ml_hide_builder_content #fusion_main_editor_wrap{
+    visibility: hidden !important;
+}
+.ml_add_element .fusion-builder-main-settings{
+    visibility: hidden !important;
+}
+
+.multilang_avada .fusion-builder-modal-bottom-container .fusiona-plus{
+    display: none;
+}
+
+.multilang_avada #ml-lang-dropdown {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: none;
+    padding-right: 10px;
+    text-align: center;
+}
+.multilang_avada #ml-lang-dropdown::-ms-expand {
+    display: none;
+}
+
+/* #mock_container .ml-has-language-selector .fusion-builder-row-container-inner{ */
+.multilang_avada .fusion-builder-row-container-inner{
+    top: 4.5em;
+    bottom: 2px;
+    left: 0;
+    width: 100%;
+    overflow: auto;
+    cursor: auto;
+    padding-bottom: 0;
+    margin-bottom: 6em;
+    margin-top: 6em;
+    text-align: left;
+}

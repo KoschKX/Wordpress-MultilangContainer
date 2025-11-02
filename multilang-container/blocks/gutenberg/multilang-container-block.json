@@ -1,0 +1,39 @@
+{
+	"apiVersion": 2,
+	"name": "multilang/container",
+	"title": "Multilang Container",
+	"category": "text",
+	"icon": "translation",
+	"description": "A block to display text in different languages.",
+	"attributes": {
+		"texts": {
+			"type": "object",
+			"default": {}
+		},
+		"language": {
+			"type": "string",
+			"default": "en"
+		}
+	},
+	"editorScript": "multilang-container-editor",
+	"supports": {
+		"html": false,
+		"color": {
+			"text": true,
+			"background": true
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"fontFamily": true,
+			"letterSpacing": true
+		},
+		"spacing": {
+			"margin": true,
+			"padding": true
+		},
+		"align": ["left", "center", "right", "wide", "full"],
+		"className": true
+	}
+}
+

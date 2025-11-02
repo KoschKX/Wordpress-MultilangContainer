@@ -1,0 +1,38 @@
+{
+	"apiVersion": 2,
+	"name": "multilang/excerpt",
+	"title": "Multilang Excerpt",
+	"category": "text",
+	"icon": "excerpt",
+	"description": "Displays the first Multilang Container block in the post as the excerpt.",
+	"attributes": {
+		"words": {
+			"type": "number",
+			"default": 0
+		}
+,
+		"preserveHtml": {
+			"type": "boolean",
+			"default": false
+		}
+	},
+	"supports": {
+		"color": {
+			"text": true,
+			"background": true
+		},
+		"typography": {
+			"fontSize": true,
+			"lineHeight": true,
+			"fontFamily": true,
+			"letterSpacing": true
+		},
+		"spacing": {
+			"margin": true,
+			"padding": true
+		},
+		"align": [ "left", "center", "right", "wide", "full" ],
+		"className": true
+	},
+	"editorScript": "excerpt-block-editor"
+}

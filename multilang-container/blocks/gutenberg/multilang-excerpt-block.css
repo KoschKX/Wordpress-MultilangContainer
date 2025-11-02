@@ -1,0 +1,6 @@
+.wp-block-multilang-excerpt {
+  margin-top: var(--wp--style--spacing--margin-top, 2em);
+  padding: var(--wp--custom--spacing--padding, 0);
+  color: var(--wp--style--color--text, inherit);
+  background: var(--wp--style--color--background, inherit);
+}

@@ -1,0 +1,33 @@
+{
+    "ui": {
+        "_selectors": "",
+        "_collapsed": true,
+        "_method": "server"
+    },
+    "share": {
+        "_collapsed": true
+    },
+    "calendar": {
+        "_selectors": "",
+        "_collapsed": true,
+        "_method": "server"
+    },
+    "sidebar": {
+        "_selectors": "",
+        "_collapsed": true,
+        "_method": "server"
+    },
+    "shop": {
+        "_selectors": "",
+        "_collapsed": true,
+        "_method": "server"
+    },
+    "footer": {
+        "_collapsed": true
+    },
+    "test": {
+        "_selectors": "",
+        "_collapsed": true,
+        "_method": "server"
+    }
+}

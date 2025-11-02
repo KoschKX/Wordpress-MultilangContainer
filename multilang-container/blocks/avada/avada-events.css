@@ -1,0 +1,28 @@
+#av_status{
+    position: fixed;
+    display: flex;
+    width: 100%;
+    height: 2em;
+    bottom: 0em;
+    left: 0;
+    z-index: 999999;
+    color: #000000;
+    background: rgb(255 255 255 / 70%);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+#av_debugbox{
+    position: fixed;
+    width: 100%;
+    height: 5em;
+    bottom: 2em;
+    left: 0;
+    z-index: 999999;
+    color: #fff;
+    overflow-y: scroll;
+    background: rgba(0,0,0,0.7);
+    pointer-events: none;
+}
