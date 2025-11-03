@@ -11,6 +11,20 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+
+  // Skip if this is a WooCommerce checkout or cart page (React blocks)
+    if ( strpos($html, 'wc-block-checkout') !== false || 
+         strpos($html, 'wc-block-cart') !== false ||
+         strpos($html, 'wp-block-woocommerce') !== false ||
+         strpos($html, 'woocommerce/proceed-to-checkout-block') !== false ||
+         strpos($html, 'class="woocommerce-checkout"') !== false ||
+         strpos($html, 'class="woocommerce-cart"') !== false ) {
+        if (!is_admin()) {
+            // error_log('Multilang: Skipping entire page - WooCommerce checkout/cart detected to prevent React conflicts');
+        }
+        return $html;
+    }
+
 /**
  * Local encoding function for data attributes (optimized version)
  * Handles special characters, quotes, HTML entities, and multi-byte Unicode

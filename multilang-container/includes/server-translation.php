@@ -41,6 +41,17 @@ function multilang_server_side_translate( $content ) {
         return $content;
     }
     
+    // Skip WooCommerce checkout blocks to prevent React DOM conflicts
+    if ( strpos($content, 'wc-block-checkout') !== false || 
+         strpos($content, 'wc-block-cart') !== false ||
+         strpos($content, 'wp-block-woocommerce') !== false ||
+         strpos($content, 'woocommerce/proceed-to-checkout-block') !== false ) {
+        if (!is_admin()) {
+            // error_log('Multilang: Skipped - WooCommerce block detected to prevent React conflicts');
+        }
+        return $content;
+    }
+    
     // Early return if no translatable content detected
     if ( strpos($content, '<') === false || strlen($content) < 100 ) {
         if (!is_admin()) {
@@ -660,9 +671,60 @@ function multilang_start_page_buffer() {
         return;
     }
     
+    // Don't start buffering for WooCommerce pages - CRITICAL for React blocks
+    global $post;
+    
+    // Check URL first (most reliable)
+    $request_uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '';
+    if ( 
+        stripos($request_uri, '/checkout') !== false ||
+        stripos($request_uri, '/cart') !== false ||
+        stripos($request_uri, '/warenkorb') !== false ||
+        stripos($request_uri, '/kasse') !== false ||
+        stripos($request_uri, '/my-account') !== false ||
+        stripos($request_uri, '/wc-api') !== false
+    ) {
+        return;
+    }
+    
+    // Check page slug
+    if ( $post && isset($post->post_name) ) {
+        $slug = strtolower($post->post_name);
+        if ( 
+            $slug === 'checkout' || 
+            $slug === 'cart' || 
+            $slug === 'warenkorb' || 
+            $slug === 'kasse' ||
+            $slug === 'my-account'
+        ) {
+            return;
+        }
+    }
+    
+    // Check for WooCommerce shortcodes
+    if ( $post && isset($post->post_content) && has_shortcode( $post->post_content, 'woocommerce_checkout' ) ) {
+        return;
+    }
+    if ( $post && isset($post->post_content) && has_shortcode( $post->post_content, 'woocommerce_cart' ) ) {
+        return;
+    }
+    
+    // Check if page contains WooCommerce blocks
+    if ( $post && function_exists('has_block') ) {
+        if (
+            has_block( 'woocommerce/checkout', $post ) || 
+            has_block( 'woocommerce/cart', $post ) ||
+            has_block( 'woocommerce/mini-cart', $post ) ||
+            has_block( 'woocommerce/cart-order-summary-block', $post ) ||
+            has_block( 'woocommerce/proceed-to-checkout-block', $post )
+        ) {
+            return;
+        }
+    }
+    
     // Debug: Add comment to show function is being called
     if (!is_admin()) {
-        // error_log('Multilang: start_page_buffer called for: ' . $_SERVER['REQUEST_URI']);
+        // error_log('Multilang: start_page_buffer called for: ' . $request_uri);
     }
     
 
@@ -724,6 +786,19 @@ function multilang_process_entire_page($html) {
     if (strlen($html) < 100) {
         if (!is_admin()) {
             // error_log('Multilang: Skipping - HTML too short (' . strlen($html) . ')');
+        }
+        return $html;
+    }
+    
+    // Skip if this is a WooCommerce checkout or cart page (React blocks)
+    if ( strpos($html, 'wc-block-checkout') !== false || 
+         strpos($html, 'wc-block-cart') !== false ||
+         strpos($html, 'wp-block-woocommerce') !== false ||
+         strpos($html, 'woocommerce/proceed-to-checkout-block') !== false ||
+         strpos($html, 'class="woocommerce-checkout"') !== false ||
+         strpos($html, 'class="woocommerce-cart"') !== false ) {
+        if (!is_admin()) {
+            // error_log('Multilang: Skipping entire page - WooCommerce checkout/cart detected to prevent React conflicts');
         }
         return $html;
     }
