@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
  * Add multilingual title metabox
  */
 function multilang_title_add_metabox() {
-
+	// Check if languages are configured
 	$languages = get_option('multilang_container_languages', array());
 	if (empty($languages)) {
 		return;
@@ -38,19 +38,19 @@ add_action('add_meta_boxes', 'multilang_title_add_metabox');
  * Multilang title metabox callback
  */
 function multilang_title_metabox_callback($post) {
-
+	// Add nonce field for security
 	wp_nonce_field('multilang_title_save', 'multilang_title_nonce');
 	
-
+	// Get selected languages
 	$languages = get_multilang_available_languages();
 	
-
+	// Get existing titles
 	$multilang_titles = get_post_meta($post->ID, '_multilang_titles', true);
 	if (!is_array($multilang_titles)) {
 		$multilang_titles = array();
 	}
 	
-
+	// Load language flags data
 	$json_path = plugin_dir_path(dirname(__FILE__)) . '/data/languages-flags.json';
 	$lang_flags = array();
 	if (file_exists($json_path)) {
@@ -61,7 +61,7 @@ function multilang_title_metabox_callback($post) {
 		}
 	}
 	
-
+	// Create language lookup array
 	$lang_lookup = array();
 	$flag_lookup = array();
 	if (is_array($lang_flags)) {
@@ -127,7 +127,7 @@ function multilang_title_metabox_callback($post) {
 	
 	echo '</div>';
 	
-
+	// Add CSS and JavaScript for dropdown functionality
 	multilang_title_add_metabox_styles_and_scripts();
 }
 
@@ -186,7 +186,7 @@ function multilang_title_add_metabox_styles_and_scripts() {
 		var currentLang = "";
 		var titleData = {};
 		
-
+		// Initialize title data from hidden inputs
 		$("input[name^=\'multilang_titles[\']").each(function() {
 			var match = $(this).attr("name").match(/multilang_titles\[([^\]]+)\]/);
 			if (match) {
@@ -194,23 +194,23 @@ function multilang_title_add_metabox_styles_and_scripts() {
 			}
 		});
 		
-
+		// Update status and input when language changes
 		function updateDisplay() {
 			var selectedLang = $("#multilang_language_select").val();
 			currentLang = selectedLang;
 			
-
+			// Update the select box background with flag
 			var selectedOption = $("#multilang_language_select option:selected");
 			var flagUrl = selectedOption.attr("data-flag");
 			if (flagUrl) {
 				$("#multilang_language_select").css("background-image", "url(" + flagUrl + ")");
 			}
 			
-
+			// Update the input field
 			var currentTitle = titleData[selectedLang] || "";
 			$("#multilang_current_title").val(currentTitle);
 			
-
+			// Update status
 			var statusEl = $("#multilang_status");
 			var langName = selectedOption.text();
 			
@@ -223,7 +223,7 @@ function multilang_title_add_metabox_styles_and_scripts() {
 			}
 		}
 		
-
+		// Save current input to data when switching languages
 		function saveCurrentInput() {
 			if (currentLang) {
 				var inputValue = $("#multilang_current_title").val();
@@ -247,7 +247,7 @@ function multilang_title_add_metabox_styles_and_scripts() {
 			}
 		});
 		
-
+		// Initialize display
 		updateDisplay();
 	});
 	</script>';
@@ -257,7 +257,7 @@ function multilang_title_add_metabox_styles_and_scripts() {
  * Save multilang title metabox
  */
 function multilang_title_save_metabox($post_id) {
-
+	// Check if this is a valid post ID
 	if (!$post_id || !is_numeric($post_id)) {
 		return;
 	}
@@ -267,7 +267,7 @@ function multilang_title_save_metabox($post_id) {
 		return;
 	}
 	
-
+	// Check if user has permission to edit the post
 	if (!current_user_can('edit_post', $post_id)) {
 		return;
 	}
@@ -282,7 +282,7 @@ function multilang_title_save_metabox($post_id) {
 		return;
 	}
 	
-
+	// Save the multilingual titles
 	if (isset($_POST['multilang_titles']) && is_array($_POST['multilang_titles'])) {
 		$multilang_titles = array();
 		foreach ($_POST['multilang_titles'] as $lang => $title) {
@@ -311,7 +311,7 @@ function multilang_get_title($post_id = null, $lang = null) {
 		$post_id = $post ? $post->ID : 0;
 	}
 	
-
+	// Validate post ID
 	if (!$post_id || !is_numeric($post_id)) {
 		return '';
 	}
@@ -326,7 +326,7 @@ function multilang_get_title($post_id = null, $lang = null) {
 	try {
 		$multilang_titles = get_post_meta($post_id, '_multilang_titles', true);
 		
-
+		// Return translated title if exists
 		if (is_array($multilang_titles) && isset($multilang_titles[$lang]) && !empty($multilang_titles[$lang])) {
 			return $multilang_titles[$lang];
 		}
@@ -388,14 +388,14 @@ function multilang_filter_the_title($title, $post_id = null) {
 	$processing = true;
 	
 	try {
-
+		// Get current language
 		$lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : 'en';
 		
-
+		// Get multilang titles directly from post meta to avoid recursion
 		$multilang_titles = get_post_meta($post_id, '_multilang_titles', true);
 		
 		if (is_array($multilang_titles)) {
-
+			// Return translated title if exists
 			if (isset($multilang_titles[$lang]) && !empty($multilang_titles[$lang])) {
 				$processing = false;
 				return $multilang_titles[$lang];
@@ -430,13 +430,13 @@ function multilang_add_title_classes($content) {
 		return $content;
 	}
 	
-
+	// Check if this post has multilingual titles
 	$multilang_titles = get_post_meta($post->ID, '_multilang_titles', true);
 	if (!is_array($multilang_titles) || empty($multilang_titles)) {
 		return $content;
 	}
 	
-
+	// Add class to common title patterns
 	$patterns = array(
 		'/<h1([^>]*class="[^"]*entry-title[^"]*"[^>]*)>/i' => '<h1$1 data-multilang-title="true">',
 		'/<h1([^>]*class="[^"]*page-title[^"]*"[^>]*)>/i' => '<h1$1 data-multilang-title="true">',
@@ -474,7 +474,7 @@ function multilang_add_title_data_to_head() {
 	$original_title = get_the_title($post->ID);
 	add_filter('the_title', 'multilang_filter_the_title', 10, 2);
 	
-
+	// Add the original title
 	$multilang_titles['original'] = $original_title;
 	
 	echo '<script type="text/javascript">';

@@ -14,8 +14,6 @@ if (!defined('ABSPATH')) {
  * Add language attribute to HTML
  */
 function lang_attribute( $output ) {
-    // For now, just keep the data-lang attribute for compatibility
-    // The actual language will be handled by CSS classes
     return $output;
 }
 add_filter( 'language_attributes', 'lang_attribute' );
@@ -27,7 +25,6 @@ function multilang_body_class_lang( $classes ) {
     $default_lang = get_multilang_default_language();
     $current_lang = $default_lang;
     
-    // Check for cookie
     if ( isset($_COOKIE['lang']) ) {
         $cookie_lang = sanitize_text_field($_COOKIE['lang']);
         $available_langs = get_multilang_available_languages();
@@ -42,10 +39,9 @@ function multilang_body_class_lang( $classes ) {
 add_filter( 'body_class', 'multilang_body_class_lang' );
 
 /**
- * Generate language bar HTML from options/json
+ * Generate language bar HTML
  */
 function multilang_generate_langbar() {
-
 	$json_path = plugin_dir_path(dirname(__FILE__)) . '/data/languages-flags.json';
 	$lang_flags = array();
 	if (file_exists($json_path)) {
@@ -53,10 +49,8 @@ function multilang_generate_langbar() {
 		$lang_flags = json_decode($json, true);
 	}
 	
-
 	$selected_langs = get_multilang_available_languages();
 	
-	// Generate langbar HTML
 	$langbar = '<ul class="multilang-flags">';
 	foreach ($lang_flags as $lang) {
 		$code = esc_attr($lang['code']);
@@ -85,7 +79,6 @@ function multilang_get_langbar_data() {
  * Enqueue language switcher JavaScript
  */
 function multilang_enqueue_language_switcher() {
-    // Don't load during backend operations
     if ( multilang_is_backend_operation() ) {
         return;
     }

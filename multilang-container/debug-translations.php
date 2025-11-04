@@ -4,14 +4,14 @@
  * Add this to wp-config.php: define('WP_DEBUG', true); define('WP_DEBUG_LOG', true);
  */
 
-
+// Add this as a temporary WordPress action for debugging
 add_action('wp_footer', function() {
     if (current_user_can('administrator')) {
         echo "<!-- TRANSLATION DEBUG INFO -->\n";
         echo "<!-- Available languages: " . implode(', ', get_multilang_available_languages()) . " -->\n";
         echo "<!-- Default language: " . get_multilang_default_language() . " -->\n";
         
-
+        // Check if language files exist and are readable
         $available_langs = get_multilang_available_languages();
         foreach ($available_langs as $lang) {
             $lang_file = get_language_file_path($lang);
@@ -32,7 +32,7 @@ add_action('wp_footer', function() {
         $server_side_enabled = get_option('multilang_container_server_side_translation', true);
         echo "<!-- Server-side translation enabled: " . ($server_side_enabled ? 'YES' : 'NO') . " -->\n";
         
-
+        // Check if cookie is set
         $current_lang_cookie = isset($_COOKIE['lang']) ? $_COOKIE['lang'] : 'not set';
         echo "<!-- Current language cookie: $current_lang_cookie -->\n";
         

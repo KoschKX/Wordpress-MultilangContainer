@@ -341,55 +341,74 @@
         // Get structure data from localized data
         var structureData = window.multilangLangBar && window.multilangLangBar.structureData ? window.multilangLangBar.structureData : {};
 
-        // Process each section individually with only its own translation data
+        // Group sections by their selectors to avoid conflicts
+        // Sections with the same selectors will have their translations merged
+        var selectorGroups = {};
+        
         Object.keys(structureData).forEach(function(sectionName) {
             var sectionConfig = structureData[sectionName];
             if (sectionConfig && typeof sectionConfig === 'object' && sectionConfig['_selectors']) {
-                // Check if this section should use JavaScript (default to server if not set)
                 var sectionMethod = sectionConfig['_method'] || 'server';
                 if (sectionMethod === 'javascript') {
-                    // Get this section's selectors
                     var selectors = sectionConfig['_selectors'];
                     if (Array.isArray(selectors) && selectors.length > 0) {
-
-                        // Get translations ONLY for this specific section across all languages
-                        var sectionTranslations = {};
-
-                        // Get all available languages from the language files
-                        var availableLanguages = [];
-                        if (window.multilangLangBar && window.multilangLangBar.languageFiles) {
-                            availableLanguages = Object.keys(window.multilangLangBar.languageFiles);
+                        // Create a key from the selectors to group sections
+                        var selectorKey = selectors.join('|||');
+                        
+                        if (!selectorGroups[selectorKey]) {
+                            selectorGroups[selectorKey] = {
+                                selectors: selectors,
+                                sections: []
+                            };
                         }
-
-                        // For each language, extract translations only for this section
-                        availableLanguages.forEach(function(lang) {
-                            var langData = languageCache[lang] || {};
-                            if (langData[sectionName] && typeof langData[sectionName] === 'object') {
-                                // Initialize language object if not exists
-                                if (!sectionTranslations[lang]) {
-                                    sectionTranslations[lang] = {};
-                                }
-
-                                // Copy section-specific translations for this language
-                                var sectionData = langData[sectionName];
-                                Object.keys(sectionData).forEach(function(key) {
-                                    if (!key.startsWith('_')) {
-                                        sectionTranslations[lang][key] = sectionData[key];
-                                    }
-                                });
-                            }
-                        });
-
-                        if (Object.keys(sectionTranslations).length > 0) {
-                            // Debug: Check if selectors match any elements
-                            selectors.forEach(function(selector) {
-                                var matchingElements = document.querySelectorAll(selector);
-                            });
-
-                            translateLang(sectionTranslations, selectors);
-                        }
+                        
+                        selectorGroups[selectorKey].sections.push(sectionName);
                     }
                 }
+            }
+        });
+
+        // Process each selector group (merge translations from all sections with same selectors)
+        Object.keys(selectorGroups).forEach(function(selectorKey) {
+            var group = selectorGroups[selectorKey];
+            var selectors = group.selectors;
+            var sections = group.sections;
+            
+            // Merge translations from all sections in this group
+            var mergedTranslations = {};
+            
+            // Get all available languages
+            var availableLanguages = [];
+            if (window.multilangLangBar && window.multilangLangBar.languageFiles) {
+                availableLanguages = Object.keys(window.multilangLangBar.languageFiles);
+            }
+            
+            // For each language, merge translations from all sections in this group
+            availableLanguages.forEach(function(lang) {
+                var langData = languageCache[lang] || {};
+                
+                if (!mergedTranslations[lang]) {
+                    mergedTranslations[lang] = {};
+                }
+                
+                // Merge all sections for this language
+                sections.forEach(function(sectionName) {
+                    if (langData[sectionName] && typeof langData[sectionName] === 'object') {
+                        var sectionData = langData[sectionName];
+                        Object.keys(sectionData).forEach(function(key) {
+                            if (!key.startsWith('_')) {
+                                // Add to merged translations (later sections won't override earlier ones)
+                                if (!mergedTranslations[lang][key]) {
+                                    mergedTranslations[lang][key] = sectionData[key];
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+            
+            if (Object.keys(mergedTranslations).length > 0) {
+                translateLang(mergedTranslations, selectors);
             }
         });
 
@@ -568,6 +587,14 @@
             }
         }
 
+        // Update WooCommerce button text
+        document.querySelectorAll('[data-multilang-button-wrapped]').forEach(function(button) {
+            var translationKey = 'data-text-' + newLang;
+            if (button.hasAttribute(translationKey)) {
+                button.textContent = button.getAttribute(translationKey);
+            }
+        });
+
         // Check for elements that don't have a translation for the current language
         // and fall back to showing the original text
         const multilingualWrappers = document.querySelectorAll('.multilang-wrapper');
@@ -675,21 +702,23 @@
                 !el.classList.contains('translate') &&
                 !el.hasAttribute('data-multilang-processed');
         });
+        
+        // Cache for this translation run
+        var translationCache = {};
+        var currentLang = document.documentElement.getAttribute('data-lang') ||
+            document.documentElement.getAttribute('lang') ||
+            document.body.getAttribute('lang') ||
+            'en';
+        var defaultLang = window.defaultLanguage || 'en';
+        var availableLanguages = sectionTranslations ? Object.keys(sectionTranslations) : [];
 
         function translateText(text, sectionTranslations) {
             if (!text.trim()) return text;
-
-            // Get current language from document attributes or default to 'en'
-            var currentLang = document.documentElement.getAttribute('data-lang') ||
-                document.documentElement.getAttribute('lang') ||
-                document.body.getAttribute('lang') ||
-                'en';
-
-            // Get default language
-            var defaultLang = window.defaultLanguage || 'en';
-
-            // Get all available languages from the section translations
-            var availableLanguages = sectionTranslations ? Object.keys(sectionTranslations) : [];
+            
+            // Check cache first
+            if (translationCache[text]) {
+                return translationCache[text];
+            }
 
             // Look for translations in this section's data across all languages
             var allTranslations = {};
@@ -820,7 +849,11 @@
             });
 
             if (lastIndex < text.length) result += text.slice(lastIndex);
-            return hasAnyTranslation ? result : text;
+            
+            // Cache the result before returning
+            var finalResult = hasAnyTranslation ? result : text;
+            translationCache[text] = finalResult;
+            return finalResult;
         }
 
         function wrapTextNodes(element) {
@@ -839,13 +872,21 @@
                 return;
             }
 
-            element.childNodes.forEach(function(node) {
+            // Convert to array to prevent live NodeList issues
+            Array.from(element.childNodes).forEach(function(node) {
                 if (node.nodeType === Node.TEXT_NODE) {
                     var originalText = node.textContent.trim();
                     if (!originalText) return; // Skip empty text nodes
 
                     var translated = translateText(originalText, sectionTranslations);
                     if (translated !== originalText) {
+                        
+                        // Skip WooCommerce buttons - they'll be handled separately
+                        if (element.classList.contains('wc-block-components-button') || 
+                            element.closest('.wc-block-components-button')) {
+                            return;
+                        }
+                        
                         var wrapper = document.createElement('span');
                         wrapper.innerHTML = translated;
                         
@@ -947,10 +988,78 @@
             });
         }
 
+        // Batch process elements in chunks to avoid blocking
+        var chunkSize = 10;
+        var currentIndex = 0;
+        
+        function processNextChunk() {
+            var endIndex = Math.min(currentIndex + chunkSize, elements.length);
+            
+            for (var i = currentIndex; i < endIndex; i++) {
+                var el = elements[i];
+                el.setAttribute('data-multilang-processed', 'true');
+                wrapTextNodes(el);
+            }
+            
+            currentIndex = endIndex;
+            
+            if (currentIndex < elements.length) {
+                requestAnimationFrame(processNextChunk);
+            } else {
+                // Handle WooCommerce buttons after all elements are processed
+                wrapWooCommerceButtons(elements, sectionTranslations);
+            }
+        }
+        
+        if (elements.length > 0) {
+            requestAnimationFrame(processNextChunk);
+        }
+    }
+    
+    // Special handling for WooCommerce buttons to avoid React conflicts
+    function wrapWooCommerceButtons(elements, sectionTranslations) {
         elements.forEach(function(el) {
-            // Mark as processed to avoid double-processing
-            el.setAttribute('data-multilang-processed', 'true');
-            wrapTextNodes(el);
+            var buttons = el.querySelectorAll('.wc-block-components-button');
+            
+            buttons.forEach(function(button) {
+                if (button.hasAttribute('data-multilang-button-wrapped')) return;
+                
+                var buttonText = button.textContent.trim();
+                if (!buttonText) return;
+                
+                var currentLang = document.documentElement.getAttribute('data-lang') || 'en';
+                var availableLanguages = sectionTranslations ? Object.keys(sectionTranslations) : [];
+                
+                var allTranslations = {};
+                availableLanguages.forEach(function(lang) {
+                    var langTranslations = sectionTranslations[lang] || {};
+                    if (langTranslations[buttonText]) {
+                        allTranslations[lang] = langTranslations[buttonText];
+                    }
+                });
+                
+                if (Object.keys(allTranslations).length === 0) return;
+                
+                // Remove any multilang spans
+                button.querySelectorAll('.multilang-wrapper, .translate').forEach(function(span) {
+                    span.replaceWith(document.createTextNode(span.textContent));
+                });
+                
+                // Store translations in data attributes
+                button.setAttribute('data-multilang-button-wrapped', 'true');
+                button.setAttribute('data-original-text', buttonText);
+                
+                availableLanguages.forEach(function(lang) {
+                    if (allTranslations[lang]) {
+                        button.setAttribute('data-text-' + lang, allTranslations[lang]);
+                    }
+                });
+                
+                // Set current language text
+                if (allTranslations[currentLang]) {
+                    button.textContent = allTranslations[currentLang];
+                }
+            });
         });
     }
 

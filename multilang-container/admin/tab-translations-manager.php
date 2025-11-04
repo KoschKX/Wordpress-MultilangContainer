@@ -61,16 +61,16 @@ function save_translations_json() {
 				}
 			}
 		}
-
+		// Save translations in uploads/multilang/
 		if (!function_exists('get_translations_data_dir')) {
 			require_once plugin_dir_path(dirname(__FILE__)) . 'multilang-container.php';
 		}
 		$file_path = get_translations_data_dir() . $lang . '.json';
-
+		// Save with keys in the order received
 		$json = json_encode($lang_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 		file_put_contents($file_path, $json);
 	}
-
+	// Remove deleted sections from structure.json
 	if (!function_exists('get_translations_data_dir')) {
 		require_once plugin_dir_path(dirname(__FILE__)) . 'multilang-container.php';
 	}
@@ -80,7 +80,7 @@ function save_translations_json() {
 		$structure_content = file_get_contents($structure_path);
 		$structure = json_decode($structure_content, true) ?: array();
 	}
-
+	// Build new structure in the order of $data
 	$new_structure = array();
 	foreach ($data as $section => $keys) {
 		// Skip any section named 'nonce' (case-insensitive)
@@ -89,14 +89,14 @@ function save_translations_json() {
 			// Keep existing section but update meta fields from incoming data
 			$new_structure[$section] = $structure[$section];
 			
-
+			// Update meta fields if provided in incoming data
 			foreach ($keys as $k => $v) {
 				if (strpos($k, '_') === 0) {
 					$new_structure[$section][$k] = $v;
 				}
 			}
 		} else {
-
+			// Add new section with all available meta fields from $keys
 			$meta = array();
 			foreach ($keys as $k => $v) {
 				if (strpos($k, '_') === 0) {
@@ -116,7 +116,7 @@ function save_translations_json() {
 			if (is_string($selectors)) {
 				// Split by comma and trim each selector
 				$selectors_array = array_map('trim', explode(',', $selectors));
-
+				// Remove empty values
 				$selectors_array = array_filter($selectors_array);
 				// Re-index array to ensure it's a proper array (not object in JSON)
 				$new_structure[$section]['_selectors'] = array_values($selectors_array);
@@ -142,20 +142,20 @@ function save_section_collapse_state() {
 	$category = sanitize_text_field($_POST['category']);
 	$collapsed = $_POST['collapsed'] === '1';
 	
-
+	// Load structure file directly
 	$structure_path = get_structure_file_path();
 	$structure = array();
 	if (file_exists($structure_path)) {
 		$structure_content = file_get_contents($structure_path);
 		$structure = json_decode($structure_content, true) ?: array();
 	}
-
+	// Update just the collapsed state for this category
 	if (!isset($structure[$category])) {
 		$structure[$category] = array();
 	}
 	$structure[$category]['_collapsed'] = $collapsed;
 	
-
+	// Save structure file
 	file_put_contents($structure_path, json_encode($structure, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 	
 	wp_die(); // Always call wp_die() at the end of AJAX handlers
@@ -193,14 +193,14 @@ function multilang_translations_tab_content() {
 
 	// --- Handle form submissions (deletion and saving) ---
 	if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
+		// Get raw POST data (JSON)
 		$raw = file_get_contents('php://input');
 		$data = json_decode($raw, true);
 		if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
 			return;
 		}
 
-
+		// Build per-language arrays
 		$languages = get_multilang_available_languages();
 		foreach ($languages as $lang) {
 			$lang_data = array();
@@ -212,7 +212,7 @@ function multilang_translations_tab_content() {
 					}
 				}
 			}
-
+			// Save each language file
 			$file_path = dirname(__FILE__) . '/../../data/translations-' . $lang . '.json';
 			file_put_contents($file_path, json_encode($lang_data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 		}
@@ -228,7 +228,7 @@ function multilang_translations_tab_content() {
 			<?php wp_nonce_field('save_translations', 'translations_nonce'); ?>
 			
 			<?php
-
+			// Get available sections and languages
 			$available_sections = get_available_translation_sections();
 			$available_languages = get_multilang_available_languages();
 			$default_language = get_multilang_default_language();
@@ -333,7 +333,7 @@ function multilang_translations_tab_content() {
 								</thead>
 								<tbody>
 									<?php foreach ($keys as $key): 
-
+										// Get all language translations for this key
 										$lang_translations = array();
 										foreach ($available_languages as $lang) {
 											$lang_translations[$lang] = get_translation($category, $key, $lang);
@@ -436,7 +436,7 @@ function load_translations() {
 		$structure = json_decode($structure_content, true) ?: array();
 	}
 	
-
+	// Load each language file and combine with structure
 	foreach ($languages as $lang) {
 		$lang_file = get_language_file_path($lang);
 		if (file_exists($lang_file)) {
@@ -468,7 +468,7 @@ function load_translations() {
 		}
 	}
 	
-
+	// Return sections in natural order
 	return $translations;
 }
 
@@ -483,7 +483,7 @@ function save_translations($translations) {
 		wp_mkdir_p($data_dir);
 	}
 	
-
+	// Extract structure information
 	$structure = array();
 	$language_data = array();
 	
@@ -537,11 +537,11 @@ function save_translations($translations) {
         }
     }
 	
-
+	// Save structure file
 	$structure_content = json_encode($structure, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 	$structure_result = file_put_contents(get_structure_file_path(), $structure_content);
 	
-
+	// Save individual language files
 	$all_success = ($structure_result !== false);
 	foreach ($language_data as $lang => $lang_translations) {
 		$lang_content = json_encode($lang_translations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -562,7 +562,7 @@ function multilang_get_translation($key, $category = null, $lang = null) {
 		$lang = get_multilang_current_language();
 	}
 	
-
+	// Load translations from file
 	$translations = load_translations();
 	
 	if ($category) {
@@ -593,7 +593,7 @@ function multilang_get_translation($key, $category = null, $lang = null) {
 		}
 	}
 	
-
+	// Return original key if no translation found
 	return $key;
 }
 
@@ -629,7 +629,7 @@ function get_available_translation_sections() {
 	$translations = load_translations();
 	$sections = array();
 
-
+	// Load structure file directly
 	$structure_path = get_structure_file_path();
 	$structure = array();
 	if (file_exists($structure_path)) {
@@ -637,14 +637,14 @@ function get_available_translation_sections() {
 		$structure = json_decode($structure_content, true) ?: array();
 	}
 
-
+	// Add all sections from structure file first
 	foreach ($structure as $category => $meta) {
 		if (strpos($category, '_') === 0) continue; // skip meta keys
 		$sections[$category] = array(
 			'structure' => array(),
 			'keys' => array()
 		);
-
+		// Extract structure data
 		if (isset($meta['_selectors'])) {
 			$sections[$category]['structure']['selector'] = is_array($meta['_selectors'])
 				? implode(', ', $meta['_selectors'])
@@ -658,7 +658,7 @@ function get_available_translation_sections() {
 		}
 	}
 
-
+	// Add keys from translations data
 	foreach ($translations as $category => $data) {
 		if (!isset($sections[$category])) {
 			$sections[$category] = array(
@@ -666,7 +666,7 @@ function get_available_translation_sections() {
 				'keys' => array()
 			);
 		}
-
+		// Extract structure data (if not already set)
 		if (isset($data['_selectors']) && !isset($sections[$category]['structure']['selector'])) {
 			$sections[$category]['structure']['selector'] = is_array($data['_selectors'])
 				? implode(', ', $data['_selectors'])
@@ -678,7 +678,7 @@ function get_available_translation_sections() {
 		if (isset($data['_method']) && !isset($sections[$category]['structure']['_method'])) {
 			$sections[$category]['structure']['_method'] = $data['_method'];
 		}
-
+		// Extract translation keys (exclude meta keys)
 		$unordered_keys = array();
 		foreach ($data as $key => $value) {
 			if (strpos($key, '_') !== 0) {

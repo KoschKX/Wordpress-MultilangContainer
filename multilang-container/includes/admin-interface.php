@@ -61,7 +61,7 @@ add_action('admin_menu', 'multilang_container_admin_menu');
  * Main settings page function
  */
 function multilang_container_settings_page() {
-
+	// Initialize variables
 	$translation_message = '';
 	$translation_message_type = 'updated';
 	$translations = load_translations();
@@ -70,7 +70,7 @@ function multilang_container_settings_page() {
 	// Handle tab switching
 	$active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'languages';
 	
-
+	// Load all available languages from JSON
 	$json_path = plugin_dir_path(dirname(__FILE__)) . '/data/languages-flags.json';
 	$lang_flags = array();
 	if (file_exists($json_path)) {
@@ -78,7 +78,7 @@ function multilang_container_settings_page() {
 		$lang_flags = json_decode($json, true);
 	}
 	
-
+	// Handle form submission - simplified to match original
 	if (isset($_POST['multilang_languages']) && check_admin_referer('multilang_container_settings', 'multilang_container_nonce')) {
 		$languages = array_map('sanitize_text_field', $_POST['multilang_languages']);
 		update_option('multilang_container_languages', $languages);
@@ -114,7 +114,7 @@ function multilang_container_settings_page() {
 			}
 		}
 		
-
+		// Build list of keys marked for deletion
 		$deleted_keys = array();
 		if (isset($_POST['delete_keys']) && is_array($_POST['delete_keys'])) {
 			foreach ($_POST['delete_keys'] as $key_data) {
@@ -164,11 +164,11 @@ function multilang_container_settings_page() {
 		
 		// Key deletion is now handled in the translation saving logic below
 		
-
+		// Load translations once
 		$translations = load_translations();
 		$sections_created = 0;
 		
-
+		// Process selectors first to create any new sections
 		if (isset($_POST['selectors'])) {
 			foreach ($_POST['selectors'] as $category => $selectors_text) {
 				$category = trim($category); // Preserve exact category format
@@ -179,24 +179,24 @@ function multilang_container_settings_page() {
 					$selectors_array = array('body'); // Default fallback
 				}
 				
-
+				// Create section if it doesn't exist
 				if (!isset($translations[$category])) {
 					$translations[$category] = array();
 					$sections_created++;
 				}
 				
-
+				// Update selectors
 				$translations[$category]['_selectors'] = $selectors_array;
 			}
 		}
 		
-
+		// Process section translation methods - save to structure.json
 		if (isset($_POST['section_methods'])) {
 			foreach ($_POST['section_methods'] as $category => $method) {
 				$category = sanitize_text_field($category);
 				$method = sanitize_text_field($method);
 				if (in_array($method, array('javascript', 'server'))) {
-
+					// Update the translations array with the new method
 					if (!isset($translations[$category])) {
 						$translations[$category] = array();
 					}
@@ -205,12 +205,12 @@ function multilang_container_settings_page() {
 			}
 		}
 		
-
+		// Save translations
 		if (isset($_POST['translations'])) {
 			foreach ($_POST['translations'] as $category => $keys) {
 				$category = trim($category); // Preserve exact category format
 				
-
+				// Get the key order for this category if it exists
 				$ordered_keys = array();
 				if (isset($_POST['key_orders'][$category])) {
 					$key_order = json_decode(stripslashes($_POST['key_orders'][$category]), true);
@@ -233,7 +233,7 @@ function multilang_container_settings_page() {
 				
 				// If we have a custom order, process keys in that order
 				if (!empty($ordered_keys)) {
-
+					// Process keys in the saved order
 					foreach ($ordered_keys as $key) {
 						if (isset($keys[$key])) {
 							$original_key = $key; // Preserve exact key format
@@ -243,7 +243,7 @@ function multilang_container_settings_page() {
 								continue;
 							}
 							
-
+							// Check if this key has been renamed
 							$final_key = $original_key;
 							if (isset($key_renames[$category][$original_key])) {
 								$final_key = $key_renames[$category][$original_key];
@@ -265,7 +265,7 @@ function multilang_container_settings_page() {
 								continue;
 							}
 							
-
+							// Check if this key has been renamed
 							$final_key = $original_key;
 							if (isset($key_renames[$category][$original_key])) {
 								$final_key = $key_renames[$category][$original_key];
@@ -287,7 +287,7 @@ function multilang_container_settings_page() {
 							continue;
 						}
 						
-
+						// Check if this key has been renamed
 						$final_key = $original_key;
 						if (isset($key_renames[$category][$original_key])) {
 							$final_key = $key_renames[$category][$original_key];
@@ -302,7 +302,7 @@ function multilang_container_settings_page() {
 			}
 		}
 		
-
+		// Save everything once
 		save_translations($translations);
 		
 		if ($sections_created > 0) {
@@ -317,7 +317,7 @@ function multilang_container_settings_page() {
 	}
 
 	
-
+	// Get languages, defaulting to English only if nothing is saved
 	$langs = get_option('multilang_container_languages', false);
 	if ($langs === false) {
 		// First time setup - default to English only
@@ -326,7 +326,7 @@ function multilang_container_settings_page() {
 	}
 	$plugin_url = plugins_url('', dirname(__FILE__));
 	
-
+	// Update available languages with current settings
 	$available_languages = $langs;
 	
 	// Render the actual UI

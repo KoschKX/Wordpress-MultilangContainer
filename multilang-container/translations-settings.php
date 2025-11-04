@@ -8,12 +8,12 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-
+// Get the path to translations JSON file
 function get_translations_file_path() {
     return plugin_dir_path(__FILE__) . 'data/';
 }
 
-
+// Load translations from JSON file
 function load_translations() {
     $file_path = get_translations_file_path();
     if (!file_exists($file_path)) {
@@ -30,7 +30,7 @@ function load_translations() {
     return $translations;
 }
 
-
+// Save translations to JSON file
 function save_translations($translations) {
     $file_path = get_translations_file_path();
     
@@ -49,7 +49,7 @@ function save_translations($translations) {
     return file_put_contents($file_path, $json_content) !== false;
 }
 
-
+// Get available languages from plugin settings
 function get_multilang_available_languages() {
     return get_option('multilang_container_languages', array('en'));
 }
@@ -61,7 +61,7 @@ function multilang_translations_settings_page() {
     $message = '';
     $message_type = '';
     
-
+    // Handle form submissions
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!wp_verify_nonce($_POST['translations_nonce'], 'save_translations')) {
             $message = 'Security check failed.';
@@ -231,7 +231,7 @@ function multilang_translations_settings_page() {
     <?php
 }
 
-
+// Initialize the translations settings
 function init_multilang_translations_settings() {
     // Only initialize if we're in admin area
     if (is_admin()) {

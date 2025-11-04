@@ -22,9 +22,8 @@ require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 
-// Include demo usage examples and shortcode
-require_once plugin_dir_path(__FILE__) . 'demo-usage.php';
-// AJAX handler: Save language settings as JSON in uploads/multilang/languages.json
+require_once plugin_dir_path(__FILE__) . 'includes/demo-usage.php';
+
 add_action('wp_ajax_multilang_save_languages_json', function() {
     if (!current_user_can('manage_options')) {
         wp_send_json_error(['message' => 'Permission denied.']);
@@ -68,12 +67,10 @@ function multilang_container_admin_scripts($hook) {
         true
     );
 
-    // Only load on our settings page
     if ($hook !== 'settings_page_multilang-container') {
         return;
     }
     
-    // Enqueue local jQuery UI Sortable CSS
     wp_enqueue_style(
         'multilang-sortable-css',
         plugins_url('css/jquery-ui-sortable.css', __FILE__),
@@ -81,16 +78,14 @@ function multilang_container_admin_scripts($hook) {
         filemtime(plugin_dir_path(__FILE__) . 'css/jquery-ui-sortable.css')
     );
     
-    // Enqueue local jQuery UI Sortable JavaScript
     wp_enqueue_script(
         'multilang-sortable-js',
         plugins_url('js/jquery-ui-sortable.js', __FILE__),
         array('jquery'),
         filemtime(plugin_dir_path(__FILE__) . 'js/jquery-ui-sortable.js'),
-        true  // Load in footer after jQuery is fully loaded
+        true
     );
     
-    // Localize script with admin URL for AJAX
     wp_localize_script('multilang-sortable-js', 'multilangAjax', array(
         'ajaxurl' => admin_url('admin-ajax.php'),
         'section_nonce' => wp_create_nonce('save_section_order'),

@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
  * Register the multilang container block
  */
 function multilang_container_register_block() {
-
+	// Get languages from settings using the dynamic function
 	$langs = get_multilang_available_languages();
 	
 	register_block_type( dirname(__FILE__, 2) . '/gutenberg/multilang-container-block.json', array(
@@ -37,7 +37,7 @@ add_action( 'init', 'multilang_container_register_block' );
  * Simple render callback that only adds fallback functionality without breaking layout
  */
 function multilang_container_render_callback($attributes, $content) {
-
+	// Get available languages and default language
 	$available_languages = get_multilang_available_languages();
 	$default_language = get_multilang_default_language();
 	
@@ -45,7 +45,7 @@ function multilang_container_render_callback($attributes, $content) {
 		return $content;
 	}
 	
-
+	// Parse existing language content from InnerBlocks
 	$dom = new DOMDocument();
 	libxml_use_internal_errors(true);
 	$dom->loadHTML('<?xml encoding="UTF-8">' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
@@ -57,7 +57,7 @@ function multilang_container_render_callback($attributes, $content) {
 	$language_blocks = array();
 	$default_content = '';
 	
-
+	// Extract existing language content
 	foreach ($lang_divs as $div) {
 		$classes = $div->getAttribute('class');
 		if (preg_match('/lang-([a-z]{2})/', $classes, $matches)) {
@@ -87,12 +87,12 @@ function multilang_container_render_callback($attributes, $content) {
 		}
 	}
 	
-
+	// Build output with all languages
 	$output = '<div class="multilang-container"><div class="translate">';
 	
 	foreach ($available_languages as $lang) {
 		if (isset($language_blocks[$lang])) {
-
+			// Check if existing content is empty
 			$text_content = trim(strip_tags($language_blocks[$lang]));
 			if (empty($text_content) && !empty($default_content)) {
 				// Use fallback content
@@ -102,7 +102,7 @@ function multilang_container_render_callback($attributes, $content) {
 				$output .= '<div class="wp-block-group lang-' . esc_attr($lang) . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $language_blocks[$lang] . '</div>';
 			}
 		} else if (!empty($default_content)) {
-
+			// Add missing language with fallback
 			$output .= '<div class="wp-block-group lang-' . esc_attr($lang) . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $default_content . '</div>';
 		}
 	}

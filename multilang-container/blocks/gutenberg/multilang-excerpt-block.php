@@ -136,11 +136,11 @@ function multilang_excerpt_render_new($attributes, $content) {
 		if ($block['blockName'] === 'multilang/container') {
 			$html = render_block($block);
 			
-
+			// Get available languages and default
 			$available_langs = get_multilang_available_languages();
 			$default_lang = get_multilang_default_language();
 			
-
+			// Extract default language content for fallback
 			$default_content = multilang_extract_language_content($html, $default_lang);
 			
 			// Find which languages already exist in the HTML
@@ -150,7 +150,7 @@ function multilang_excerpt_render_new($attributes, $content) {
 				$existing_langs = $matches[1];
 			}
 			
-
+			// Process each existing language div and fill in missing content with default language
 			$html = preg_replace_callback(
 				'/(<(?:span|div)[^>]*class=["\'][^"\']*lang-([a-z]{2})[^"\']*["\'][^>]*>)(.*?)(<\/(?:span|div)>)/is',
 				function($matches) use ($wordLimit, $preserveHtml, $default_content, $default_lang) {
@@ -184,10 +184,10 @@ function multilang_excerpt_render_new($attributes, $content) {
 				$html
 			);
 			
-
+			// Add missing language divs with default content
 			foreach ($available_langs as $lang) {
 				if (!in_array($lang, $existing_langs)) {
-
+					// Create content for missing language
 					$fallback_content = $default_content;
 					
 					// Apply word limiting if specified
@@ -205,7 +205,7 @@ function multilang_excerpt_render_new($attributes, $content) {
 						}
 					}
 					
-
+					// Add the missing language div - append it safely
 					$missing_div = '<div class="wp-block-group lang-' . $lang . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $fallback_content . '</div>';
 					$html .= $missing_div;
 				}

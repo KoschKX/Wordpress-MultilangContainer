@@ -172,6 +172,7 @@
                                         flag_url = multilangAvadaData.plugin_url + flag_dir + flag_filename + '.svg';
                                         flag = '<span class="multilang-flag" style="background-image: url(' + flag_url + ');"></span>';
                                     }
+                                    console.log(flag);
                                     badge = $('<div class="multilang-lang-badge"><span class="multilang-text">' + lang.toUpperCase() + '</span>'+flag+'</div>');
                                     col.prepend(badge);
                                 }
@@ -366,6 +367,7 @@
                 if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                     if (jQuery('body').hasClass('fusion-builder-enabled')) {
                         setTimeout(function() {
+                            console.log('test');
                             convertNestedColumns();
                         }, 100);
                     }

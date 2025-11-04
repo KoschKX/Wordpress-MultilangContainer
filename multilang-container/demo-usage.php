@@ -18,15 +18,15 @@ if (!defined('ABSPATH')) {
 function demo_php_translations() {
     echo '<h3>PHP Translation Examples:</h3>';
     
-
+    // Get a translation from a specific category
     echo '<p>UI Submit Button: ' . multilang_get_translation('Submit', 'ui') . '</p>';
     echo '<p>Footer Contact: ' . multilang_get_translation('Contact', 'footer') . '</p>';
     echo '<p>Calendar January: ' . multilang_get_translation('January', 'calendar') . '</p>';
     
-
+    // Get a translation without specifying category (searches all categories)
     echo '<p>Search anywhere: ' . multilang_get_translation('Next') . '</p>';
     
-
+    // Get a translation in a specific language
     echo '<p>Submit in German: ' . multilang_get_translation('Submit', 'ui', 'de') . '</p>';
     echo '<p>Contact in Italian: ' . multilang_get_translation('Contact', 'footer', 'it') . '</p>';
 }
@@ -40,11 +40,11 @@ function demo_javascript_translations() {
     <script>
     // Wait for the page to load
     document.addEventListener('DOMContentLoaded', function() {
-
+        // Check if translations are available
         if (typeof multilangLangBar !== 'undefined' && multilangLangBar.translations) {
             // console.log('All translations:', multilangLangBar.translations);
             
-
+            // Get current language (from data-lang attribute on html)
             const currentLang = document.documentElement.getAttribute('data-lang') || 'en';
             
             // Function to get translation in JavaScript
@@ -70,7 +70,7 @@ function demo_javascript_translations() {
                     return getTranslation(key, category, 'en');
                 }
                 
-
+                // Return key if nothing found
                 return key;
             }
             
@@ -78,7 +78,7 @@ function demo_javascript_translations() {
             // console.log('Submit button:', getTranslation('Submit', 'ui'));
             // console.log('Contact:', getTranslation('Contact', 'footer'));
             
-
+            // Update page elements with translations
             const submitButtons = document.querySelectorAll('input[type="submit"], button[type="submit"]');
             submitButtons.forEach(button => {
                 if (button.value === 'Submit' || button.textContent === 'Submit') {

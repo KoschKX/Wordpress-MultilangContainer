@@ -31,7 +31,7 @@ function multilang_inject_immediate_css() {
             }
         }
         
-
+        // Build CSS string
         $css = '
         /* Hide all language variants by default */
         .translate .lang-en,
@@ -67,11 +67,11 @@ function multilang_inject_immediate_css() {
             display: block !important; 
         }';
         
-
+        // Build JavaScript
         $js = '
         // Immediately check for language preference and update CSS
         (function() {
-
+            // Helper function to get cookie value
             function getCookie(name) {
                 var value = "; " + document.cookie;
                 var parts = value.split("; " + name + "=");
@@ -79,22 +79,22 @@ function multilang_inject_immediate_css() {
                 return null;
             }
             
-
+            // Get language from cookie first, then localStorage, then default
             var cookieLang = getCookie("lang");
             var storageLang = localStorage.getItem("preferredLanguage");
             var savedLang = cookieLang || storageLang || "' . esc_js($default_lang) . '";
             var availableLangs = ' . json_encode($available_langs) . ';
             
-
+            // Validate saved language
             if (availableLangs.indexOf(savedLang) === -1) {
                 savedLang = "' . esc_js($default_lang) . '";
             }
             
-
+            // Save to both localStorage and cookie
             localStorage.setItem("preferredLanguage", savedLang);
             document.cookie = "lang=" + savedLang + "; path=/; max-age=31536000; SameSite=Lax";
             
-
+            // Update CSS rules immediately with html[data-lang] selector to match main CSS
             var style = document.getElementById("multilang-immediate-css");
             if (style) {
                 var newCSS = "/* Hide all languages */ " +
@@ -106,7 +106,7 @@ function multilang_inject_immediate_css() {
                 style.textContent = newCSS;
             }
             
-
+            // Set attributes
             var html = document.documentElement;
             
             if (html) {
@@ -121,7 +121,7 @@ function multilang_inject_immediate_css() {
                     body.setAttribute("lang", savedLang);
                     body.setAttribute("data-lang", savedLang);
                     
-
+                    // Remove all existing lang- classes
                     body.className = body.className.replace(/\\blang-[a-z]{2}\\b/g, "");
                     body.className += " lang-" + savedLang;
                 } else {
@@ -152,7 +152,7 @@ add_action( 'wp_enqueue_scripts', 'multilang_inject_immediate_css', 0 );
 function multilang_container_enqueue_styles() {
 	$css_path = get_switchcss_file_path();
 	$css_url = '';
-
+	// Convert absolute path to URI
 	if (strpos($css_path, ABSPATH) === 0) {
 		$css_url = site_url(str_replace(ABSPATH, '', $css_path));
 	} else {
@@ -197,7 +197,7 @@ function multilang_container_enqueue_scripts() {
 		true
 	);
 	
-
+	// Check if any section uses JavaScript translation by reading structure.json
 	$structure_file = get_structure_file_path();
 	$has_javascript_sections = false;
 	
@@ -237,7 +237,7 @@ function multilang_container_enqueue_scripts() {
 	// Generate langbar HTML using dedicated handler
 	$langbar = multilang_generate_langbar();
 	
-
+	// Get current page title translations if we're on a single page/post
 	$page_titles = array();
 	if (is_singular()) {
 		global $post;
@@ -258,7 +258,7 @@ function multilang_container_enqueue_scripts() {
 		}
 	}
 	
-
+	// Load individual language files for frontend
 	$languages = get_multilang_available_languages();
 	$individual_lang_data = array();
 	foreach ($languages as $lang) {
@@ -272,7 +272,7 @@ function multilang_container_enqueue_scripts() {
 		}
 	}
 	
-
+	// Load structure data for JavaScript
 	$structure_file = get_structure_file_path();
 	$structure_data = array();
 	if (file_exists($structure_file)) {
@@ -302,7 +302,7 @@ function multilang_container_enqueue_scripts() {
 	// Note: Removed enhance_translations_with_fallbacks call since $translations was undefined
 	// and we're using individual language files now
 	
-
+	// Add inline script to set default language only
 	$default_lang = get_multilang_default_language();
 	$inline_script = 'window.translations = {}; // Disabled for individual file system
 	window.defaultLanguage = "' . esc_js($default_lang) . '";';
@@ -326,14 +326,14 @@ function multilang_get_language_file_ajax() {
 		return;
 	}
 	
-
+	// Check if language file exists
 	$lang_file = get_language_file_path($lang);
 	if (!file_exists($lang_file)) {
 		wp_send_json_error('Language file not found for: ' . $lang);
 		return;
 	}
 	
-
+	// Load and parse language file
 	$lang_content = file_get_contents($lang_file);
 	$lang_data = json_decode($lang_content, true);
 	if (!$lang_data) {
@@ -341,6 +341,6 @@ function multilang_get_language_file_ajax() {
 		return;
 	}
 	
-
+	// Return the language data
 	wp_send_json_success($lang_data);
 }

@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
  * Uses Gutenberg-style approach: parse existing content and rebuild with auto-fill
  */
 function multilang_avada_shortcode($atts) {
-
+    // Get available languages from plugin settings with error checking
     $available_languages = function_exists('get_multilang_available_languages') ? 
         get_multilang_available_languages() : array('en');
     
@@ -25,7 +25,7 @@ function multilang_avada_shortcode($atts) {
         $available_languages = array('en');
     }
     
-
+    // Get default language for fallback
     $default_language = function_exists('get_multilang_default_language') ? 
         get_multilang_default_language() : $available_languages[0];
     
@@ -41,19 +41,19 @@ function multilang_avada_shortcode($atts) {
     
     // AGGRESSIVELY REMOVE ALL MARKER COLUMNS AND TEXT
     if (!empty($content)) {
-
+        // Remove fusion_text with multilang_marker text
         $content = preg_replace('/\[fusion_text[^\]]*\].*?multilang_marker_.*?\[\/fusion_text\]/is', '', $content);
         
-
+        // Remove column_inner with multilang_marker class (with all its content)
         $content = preg_replace('/\[fusion_builder_column_inner[^\]]*multilang_marker[^\]]*\].*?\[\/fusion_builder_column_inner\]/is', '', $content);
         
-
+        // Remove standalone multilang_marker text
         // $content = preg_replace('/multilang_marker_[a-zA-Z0-9_]+/', '', $content);
         
-
+        // Remove HTML divs/columns with multilang_marker class
         // $content = preg_replace('/<div[^>]*multilang_marker[^>]*>.*?<\/div>/is', '', $content);
         
-
+        // Remove fusion_column_inner with multilang_marker in class attribute  
         //$content = preg_replace('/<div[^>]*fusion-builder-column-inner[^>]*multilang_marker[^>]*>.*?<\/div>/is', '', $content);
         
         // Clean up any double spaces or empty lines
@@ -61,7 +61,7 @@ function multilang_avada_shortcode($atts) {
         $content = trim($content);
     }
     
-
+    // Parse existing language content
     $language_blocks = array();
     $default_content = '';
     
@@ -80,7 +80,7 @@ function multilang_avada_shortcode($atts) {
         $lang_divs = null;
         
         if ($marker_elements->length > 0) {
-
+            // Get the first marker
             $marker = $marker_elements->item(0);
             
             // Find the nearest parent fusion-builder-row-inner
@@ -106,7 +106,7 @@ function multilang_avada_shortcode($atts) {
                 $xpath->query('//div[contains(@class, "translate") and contains(@class, "lang-")]');
         }
         
-
+        // Extract language content in one pass
         foreach ($lang_divs as $div) {
             // Skip marker columns
             if (strpos($div->getAttribute('class'), 'multilang_marker') !== false) {
@@ -116,7 +116,7 @@ function multilang_avada_shortcode($atts) {
             if (preg_match('/lang-([a-z]{2})/i', $div->getAttribute('class'), $matches)) {
                 $lang = $matches[1];
                 
-
+                // Build innerHTML directly
                 $inner_html = '';
                 foreach ($div->childNodes as $child) {
                     $inner_html .= $dom->saveHTML($child);
@@ -152,13 +152,13 @@ function multilang_avada_shortcode($atts) {
         }
     }
     
-
+    // Build language divs efficiently
     $lang_divs = array();
     foreach ($available_languages as $lang) {
         $content_to_use = '';
         
         if (isset($language_blocks[$lang])) {
-
+            // Check if existing content is empty
             $text_content = trim(strip_tags($language_blocks[$lang]));
             if (empty($text_content) && !empty($default_content)) {
                 // Use fallback content
@@ -168,14 +168,14 @@ function multilang_avada_shortcode($atts) {
                 $content_to_use = $language_blocks[$lang];
             }
         } else if (!empty($default_content)) {
-
+            // Add missing language with fallback
             $content_to_use = $default_content;
         }
         
         $lang_divs[] = '<div class="translate lang-' . esc_attr($lang) . '">' . $content_to_use . '</div>';
     }
     
-
+    // Build output efficiently
     $css_class = $atts['css_class'] ? ' ' . sanitize_html_class($atts['css_class']) : '';
     $unique_id = $atts['unique_id'] ?: uniqid('ml_', true);
     
@@ -195,7 +195,7 @@ function multilang_filter_content($content) {
         return $content;
     }
     
-
+    // Get available languages
     $available_languages = function_exists('get_multilang_available_languages') ? 
         get_multilang_available_languages() : array('en');
     
@@ -226,7 +226,7 @@ function multilang_filter_content($content) {
             }
             
             if ($row_inner) {
-
+                // Extract language content from this row
                 $language_blocks = array();
                 $default_content = '';
                 
@@ -239,11 +239,11 @@ function multilang_filter_content($content) {
                         continue;
                     }
                     
-
+                    // Extract language
                     if (preg_match('/lang-([a-z]{2})/i', $col->getAttribute('class'), $matches)) {
                         $lang = $matches[1];
                         
-
+                        // Get innerHTML - keep EVERYTHING inside the language column
                         $inner_html = '';
                         foreach ($col->childNodes as $child) {
                             $inner_html .= $dom->saveHTML($child);
@@ -260,7 +260,7 @@ function multilang_filter_content($content) {
                     }
                 }
                 
-
+                // Build replacement HTML
                 $lang_divs = array();
                 foreach ($available_languages as $lang) {
                     $content_to_use = '';
@@ -279,7 +279,7 @@ function multilang_filter_content($content) {
                 $unique_id = uniqid('ml_', true);
                 $replacement_html = '<div id="' . esc_attr($unique_id) . '" class="multilang-container"><div class="multilang-wrapper">' . implode('', $lang_divs) . '</div></div>';
                 
-
+                // Create replacement node
                 $fragment = $dom->createDocumentFragment();
                 $fragment->appendXML($replacement_html);
                 
@@ -288,7 +288,7 @@ function multilang_filter_content($content) {
             }
         }
         
-
+        // Save back to HTML
         $content = $dom->saveHTML();
     }
     
@@ -304,7 +304,7 @@ function multilang_register_fusion_element() {
         return;
     }
 
-
+    // Get available languages with error checking
     $available_languages = function_exists('get_multilang_available_languages') ? 
         get_multilang_available_languages() : array('en', 'de');
         
@@ -448,7 +448,7 @@ function multilang_avada_enqueue_assets() {
             true
         );
         
-
+        // Get element name from global variable
         global $multilang_element_name;
         $element_name = !empty($multilang_element_name) ? $multilang_element_name : 'Multilang Container';
         

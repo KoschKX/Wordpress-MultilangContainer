@@ -8,7 +8,7 @@ function multilang_generate_css($langs) {
 
 	$selected_lang_flags = get_selected_languages_flags($langs);
 	
-
+	// Get exclude selectors
 	$custom_selectors = get_option('multilang_container_exclude_selectors', '');
 	$not_selectors = array('.no-translate');
 	if (trim($custom_selectors) !== '') {

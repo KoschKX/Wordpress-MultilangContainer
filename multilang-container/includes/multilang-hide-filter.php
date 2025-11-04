@@ -11,20 +11,6 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-
-  // Skip if this is a WooCommerce checkout or cart page (React blocks)
-    if ( strpos($html, 'wc-block-checkout') !== false || 
-         strpos($html, 'wc-block-cart') !== false ||
-         strpos($html, 'wp-block-woocommerce') !== false ||
-         strpos($html, 'woocommerce/proceed-to-checkout-block') !== false ||
-         strpos($html, 'class="woocommerce-checkout"') !== false ||
-         strpos($html, 'class="woocommerce-cart"') !== false ) {
-        if (!is_admin()) {
-            // error_log('Multilang: Skipping entire page - WooCommerce checkout/cart detected to prevent React conflicts');
-        }
-        return $html;
-    }
-
 /**
  * Local encoding function for data attributes (optimized version)
  * Handles special characters, quotes, HTML entities, and multi-byte Unicode
@@ -52,7 +38,7 @@ function multilang_hide_filter_encode_for_data_attr($text) {
     // For complex content, use JSON encoding but preserve Unicode
     $json_encoded = json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     
-
+    // Remove surrounding quotes from JSON
     return substr($json_encoded, 1, -1);
 }
 
@@ -66,7 +52,7 @@ function multilang_hide_non_current_language($content) {
         return $content;
     }
     
-
+    // Get current language using the same method as server translation
     $current_lang = multilang_get_current_language();
     if (!$current_lang) {
         return $content;
@@ -80,7 +66,7 @@ function multilang_hide_non_current_language($content) {
         return $content;
     }
     
-
+    // Create DOM document once
     libxml_use_internal_errors(true);
     $dom = new DOMDocument();
     $dom->encoding = 'UTF-8';
@@ -89,7 +75,7 @@ function multilang_hide_non_current_language($content) {
     
     $xpath = new DOMXPath($dom);
     
-
+    // Process all translation elements in a single query (more efficient)
     // This gets both wrapped and standalone elements
     $translation_elements = $xpath->query('//*[contains(@class, "translate") and contains(@class, "lang-")]');
     
@@ -97,7 +83,7 @@ function multilang_hide_non_current_language($content) {
     $lang_pattern = '/lang-([a-z]{2})/';
     
     foreach ($translation_elements as $element) {
-
+        // Get the language from the class
         $classes = $element->getAttribute('class');
         
         if (!preg_match($lang_pattern, $classes, $matches)) {
@@ -106,7 +92,7 @@ function multilang_hide_non_current_language($content) {
         
         $element_lang = $matches[1];
         
-
+        // Get all content including HTML (optimized: build string once)
         $original_content = '';
         foreach ($element->childNodes as $child) {
             $original_content .= $dom->saveHTML($child);
@@ -127,7 +113,7 @@ function multilang_hide_non_current_language($content) {
         }
     }
     
-
+    // Return the modified content
     return $dom->saveHTML();
 }
 
@@ -140,7 +126,7 @@ add_filter('widget_text', 'multilang_hide_non_current_language', 999);
  * Add body attribute to indicate that hide filtering is active
  */
 function multilang_add_hide_filter_body_attribute($classes) {
-
+    // Add a class to indicate hide filtering is active
     $classes[] = 'multilang-hide-filter-active';
     return $classes;
 }
