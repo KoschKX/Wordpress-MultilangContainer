@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 /**
- * Server-side translation processing - optimized for performance
+ * Server-side translation processing
  */
 function multilang_server_side_translate( $content ) {
     static $call_count = 0;
@@ -65,7 +65,7 @@ function multilang_server_side_translate( $content ) {
 }
 
 /**
- * Optimized HTML processing with early returns and DOM optimization
+ * HTML processing for translations
  */
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
     if (empty($translations) || strlen($html) < 100) {
