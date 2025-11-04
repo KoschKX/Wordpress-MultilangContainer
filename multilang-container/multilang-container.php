@@ -22,7 +22,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 
-require_once plugin_dir_path(__FILE__) . 'includes/demo-usage.php';
+require_once plugin_dir_path(__FILE__) . 'demo-usage.php';
 
 add_action('wp_ajax_multilang_save_languages_json', function() {
     if (!current_user_can('manage_options')) {
