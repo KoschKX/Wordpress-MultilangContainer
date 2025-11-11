@@ -172,7 +172,6 @@
                                         flag_url = multilangAvadaData.plugin_url + flag_dir + flag_filename + '.svg';
                                         flag = '<span class="multilang-flag" style="background-image: url(' + flag_url + ');"></span>';
                                     }
-                                    console.log(flag);
                                     badge = $('<div class="multilang-lang-badge"><span class="multilang-text">' + lang.toUpperCase() + '</span>'+flag+'</div>');
                                     col.prepend(badge);
                                 }
@@ -188,7 +187,7 @@
                     
                     // Remove any existing click handlers first, then add new one
                     controls.find('.fusion-builder-module-control').off('click.multilang').on('click.multilang', function(e){
-                        console.log('Settings button clicked for multilang element');
+                        // console.log('Settings button clicked for multilang element');
                         setTimeout(function() {
                             addLanguageSelector();
                         }, 0);
@@ -262,7 +261,7 @@
     }
 
     function filterColumnsByLanguage(lang) {
-        console.log('[filterColumnsByLanguage] Filtering for: ' + lang);
+        // console.log('[filterColumnsByLanguage] Filtering for: ' + lang);
         
         var languages = multilangAvadaData.available_languages || [];
         
@@ -367,7 +366,6 @@
                 if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
                     if (jQuery('body').hasClass('fusion-builder-enabled')) {
                         setTimeout(function() {
-                            console.log('test');
                             convertNestedColumns();
                         }, 100);
                     }
