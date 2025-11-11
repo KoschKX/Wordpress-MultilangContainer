@@ -19,7 +19,9 @@ require_once plugin_dir_path(__FILE__) . 'includes/server-translation.php';
 require_once plugin_dir_path(__FILE__) . 'includes/frontend-rendering.php';
 require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
+require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
+require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 
 require_once plugin_dir_path(__FILE__) . 'demo-usage.php';

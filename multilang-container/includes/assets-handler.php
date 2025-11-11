@@ -165,6 +165,18 @@ function multilang_container_enqueue_styles() {
 		array(),
 		filemtime($css_path)
 	);
+	
+	// Enqueue excerpts CSS
+	$excerpts_css_path = plugin_dir_path(dirname(__FILE__)) . 'css/multilang-excerpts.css';
+	if (file_exists($excerpts_css_path)) {
+		$excerpts_css_url = plugins_url('css/multilang-excerpts.css', dirname(__FILE__));
+		wp_enqueue_style(
+			'multilang-excerpts-css',
+			$excerpts_css_url,
+			array(),
+			filemtime($excerpts_css_path)
+		);
+	}
 }
 add_action('wp_enqueue_scripts', 'multilang_container_enqueue_styles', 0);
 add_action('enqueue_block_editor_assets', 'multilang_container_enqueue_styles', 0);

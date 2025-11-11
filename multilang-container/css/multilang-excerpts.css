@@ -1,0 +1,16 @@
+.recent-posts-content .meta + p,
+.fusion-blog-archive .fusion-post-content-container {
+    overflow: hidden;
+    position: relative;
+}
+
+.recent-posts-content .meta + p .translate,
+.fusion-blog-archive .translate {
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 3; /* Limit lines */
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
