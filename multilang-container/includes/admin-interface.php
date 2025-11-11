@@ -347,6 +347,7 @@ function multilang_render_admin_ui($active_tab, $lang_flags, $langs, $plugin_url
 	echo '<h2 class="nav-tab-wrapper" style="margin-bottom: 20px;">';
 	echo '<a href="#" class="nav-tab ' . ($active_tab == 'languages' ? 'nav-tab-active' : '') . '" data-tab="languages">Languages</a>';
 	echo '<a href="#" class="nav-tab ' . ($active_tab == 'translations' ? 'nav-tab-active' : '') . '" data-tab="translations">Translation Manager</a>';
+	echo '<a href="#" class="nav-tab ' . ($active_tab == 'misc' ? 'nav-tab-active' : '') . '" data-tab="misc">Options</a>';
 	echo '</h2>';
 	
 	// Show translation messages
@@ -361,6 +362,9 @@ function multilang_render_admin_ui($active_tab, $lang_flags, $langs, $plugin_url
 	
 	// Translations tab
 	multilang_render_translations_tab($active_tab, $translations, $available_languages);
+	
+	// Options tab
+	multilang_render_options_tab($active_tab);
 	
 	echo '</div>';
 }

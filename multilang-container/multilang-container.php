@@ -19,6 +19,9 @@ require_once plugin_dir_path(__FILE__) . 'includes/server-translation.php';
 require_once plugin_dir_path(__FILE__) . 'includes/frontend-rendering.php';
 require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
+require_once plugin_dir_path(__FILE__) . 'admin/tab-language-settings.php';
+require_once plugin_dir_path(__FILE__) . 'admin/tab-options.php';
+require_once plugin_dir_path(__FILE__) . 'admin/utilities-admin.php';
 require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
@@ -79,6 +82,7 @@ function multilang_container_admin_scripts($hook) {
         array(),
         filemtime(plugin_dir_path(__FILE__) . 'css/jquery-ui-sortable.css')
     );
+    
     
     wp_enqueue_script(
         'multilang-sortable-js',
