@@ -36,15 +36,17 @@ function multilang_save_options($options) {
 function multilang_handle_options_save() {
     if (isset($_POST['multilang_save_options']) && check_admin_referer('multilang_options_nonce')) {
         $options = multilang_get_options();
+        $options['excerpt_line_limit_enabled'] = isset($_POST['multilang_excerpt_line_limit_enabled']) ? 1 : 0;
         $options['excerpt_line_limit'] = isset($_POST['multilang_excerpt_line_limit']) ? intval($_POST['multilang_excerpt_line_limit']) : 0;
         multilang_save_options($options);
-        
+        /*
         add_settings_error(
             'multilang_options',
             'multilang_settings_updated',
             'Settings saved successfully.',
             'updated'
         );
+        */
     }
 }
 add_action('admin_init', 'multilang_handle_options_save');
@@ -52,6 +54,7 @@ add_action('admin_init', 'multilang_handle_options_save');
 // Render options tab content
 function multilang_render_options_tab($active_tab) {
     $options = multilang_get_options();
+    $line_limit_enabled = isset($options['excerpt_line_limit_enabled']) ? $options['excerpt_line_limit_enabled'] : 0;
     $line_limit = isset($options['excerpt_line_limit']) ? $options['excerpt_line_limit'] : '';
     
     echo '<div id="tab-misc" class="multilang-tab-content" style="' . ($active_tab !== 'misc' ? 'display:none;' : '') . '">';
@@ -65,6 +68,20 @@ function multilang_render_options_tab($active_tab) {
     <h2>Excerpt Settings</h2>
     
     <table class="form-table">
+        <tr>
+            <th scope="row">
+                <label for="multilang_excerpt_line_limit_enabled">Enable Line Limiting</label>
+            </th>
+            <td>
+                <input 
+                    type="checkbox" 
+                    id="multilang_excerpt_line_limit_enabled" 
+                    name="multilang_excerpt_line_limit_enabled" 
+                    value="1"
+                    <?php checked($line_limit_enabled, 1); ?>
+                />
+            </td>
+        </tr>
         <tr>
             <th scope="row">
                 <label for="multilang_excerpt_line_limit">Line Limit for Excerpts</label>
@@ -94,9 +111,10 @@ function multilang_render_options_tab($active_tab) {
 // Output inline CSS for excerpt line limiting
 function multilang_excerpt_line_limit_css() {
     $options = multilang_get_options();
+    $line_limit_enabled = isset($options['excerpt_line_limit_enabled']) ? $options['excerpt_line_limit_enabled'] : 0;
     $line_limit = isset($options['excerpt_line_limit']) ? $options['excerpt_line_limit'] : '';
     
-    if (!empty($line_limit) && is_numeric($line_limit)) {
+    if ($line_limit_enabled && !empty($line_limit) && is_numeric($line_limit)) {
         echo '<style id="multilang-excerpt-limit">';
         echo '.recent-posts-content .meta + p .translate,';
         echo '.fusion-blog-archive .translate {';
