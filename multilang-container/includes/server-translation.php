@@ -1,22 +1,12 @@
 <?php
-/**
- * Multilang Container - Server-side Translation
- * 
- * Handles server-side translation processing, HTML parsing, and DOM manipulation
- */
-
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Server-side translation processing
- */
 function multilang_server_side_translate( $content ) {
     static $call_count = 0;
-    static $translations_cache = null;
-    static $lang_data_cache = array();
+    static $translations = null;
+    static $lang_cache = array();
     
     $call_count++;
     
@@ -48,41 +38,38 @@ function multilang_server_side_translate( $content ) {
         }
     }
     
-    if ($translations_cache === null) {
-        $translations_cache = load_translations();
-        if ( empty($translations_cache) ) {
-            $translations_cache = false;
+    if ($translations === null) {
+        $translations = load_translations();
+        if ( empty($translations) ) {
+            $translations = false;
         }
     }
     
-    if ( $translations_cache === false ) {
+    if ( $translations === false ) {
         return $content;
     }
     
-    $processed_content = multilang_process_text_for_translations($content, $translations_cache, $current_lang_cache, $default_lang_cache);
+    $processed_content = multilang_process_text_for_translations($content, $translations, $current_lang_cache, $default_lang_cache);
     
     return $processed_content;
 }
 
-/**
- * HTML processing for translations
- */
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
     if (empty($translations) || strlen($html) < 100) {
         return $html;
     }
     
-    static $lang_data_cache = array();
+    static $lang_cache = array();
     
-    if (!isset($lang_data_cache[$current_lang])) {
-        $lang_data_cache[$current_lang] = multilang_get_language_data($current_lang);
+    if (!isset($lang_cache[$current_lang])) {
+        $lang_cache[$current_lang] = multilang_get_language_data($current_lang);
     }
-    if (!isset($lang_data_cache[$default_lang])) {
-        $lang_data_cache[$default_lang] = multilang_get_language_data($default_lang);
+    if (!isset($lang_cache[$default_lang])) {
+        $lang_cache[$default_lang] = multilang_get_language_data($default_lang);
     }
     
-    $current_lang_translations = $lang_data_cache[$current_lang];
-    $default_lang_translations = $lang_data_cache[$default_lang];
+    $current_lang_translations = $lang_cache[$current_lang];
+    $default_lang_translations = $lang_cache[$default_lang];
     
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
         return $html;
@@ -116,14 +103,11 @@ function multilang_process_text_for_translations($html, $translations, $current_
     return $result;
 }
 
-/**
- * Get language data structure with caching
- */
 function multilang_get_language_data($lang) {
-    static $language_data_cache = array();
+    static $cache = array();
     
-    if (isset($language_data_cache[$lang])) {
-        return $language_data_cache[$lang];
+    if (isset($cache[$lang])) {
+        return $cache[$lang];
     }
     
     $lang_file = get_language_file_path($lang);
@@ -131,24 +115,21 @@ function multilang_get_language_data($lang) {
         $lang_content = file_get_contents($lang_file);
         $data = json_decode($lang_content, true) ?: array();
         
-        $language_data_cache[$lang] = $data;
+        $cache[$lang] = $data;
         
         return $data;
     }
     
-    $language_data_cache[$lang] = array();
+    $cache[$lang] = array();
     return array();
 }
 
-/**
- * Find translation in data structure
- */
-function multilang_find_translation_in_data($text, $lang_data) {
-    if (!is_array($lang_data)) {
+function multilang_find_translation_in_data($text, $data) {
+    if (!is_array($data)) {
         return null;
     }
     
-    foreach ($lang_data as $category => $keys) {
+    foreach ($data as $category => $keys) {
         if (is_array($keys) && isset($keys[$text])) {
             $translation = $keys[$text];
             return !empty(trim($translation)) ? $translation : null;
@@ -158,18 +139,14 @@ function multilang_find_translation_in_data($text, $lang_data) {
     return null;
 }
 
-/**
- * Translate text with caching
- */
 function multilang_translate_text($text, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
-    static $translation_cache = array();
-    static $available_langs_cache = null;
+    static $cache = array();
+    static $langs = null;
     
     if (empty(trim($text))) {
         return $text;
     }
     
-    // Don't process text that already contains multilang-wrapper spans
     if (strpos($text, 'multilang-wrapper') !== false || strpos($text, 'class="translate') !== false) {
         return $text;
     }
@@ -177,8 +154,8 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     $trimmed_text = trim($text);
     
     $cache_key = md5($trimmed_text . $current_lang . $default_lang);
-    if (isset($translation_cache[$cache_key])) {
-        return $translation_cache[$cache_key];
+    if (isset($cache[$cache_key])) {
+        return $cache[$cache_key];
     }
     
     $current_translation = multilang_find_translation_in_data($trimmed_text, $current_lang_translations);
@@ -190,19 +167,21 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     }
     
     if (strlen($trimmed_text) > 50 && !$current_translation && !$default_translation && !$default_partial_translation) {
-        $translation_cache[$cache_key] = $text;
+        $cache[$cache_key] = $text;
         return $text;
     }
     
     $should_process = $current_translation || $default_translation || $default_partial_translation;
     
-    if (!$should_process) {
+    $has_section_specific = !empty($current_lang_translations) && is_array($current_lang_translations) && count($current_lang_translations) > 0;
+    
+    if (!$should_process && !$has_section_specific) {
         $should_process = multilang_text_contains_translatable_words($trimmed_text);
     }
     
     if ($should_process) {
-        if ($available_langs_cache === null) {
-            $available_langs_cache = get_multilang_available_languages();
+        if ($langs === null) {
+            $langs = get_multilang_available_languages();
         }
         
         $full_result = '';
@@ -210,7 +189,7 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
         $best_fallback = $default_translation ? $default_translation : 
                         ($default_partial_translation ? $default_partial_translation : $trimmed_text);
         
-        foreach ($available_langs_cache as $lang) {
+        foreach ($langs as $lang) {
             $lang_data = array();
             
             if (is_array($current_lang_translations)) {
@@ -238,41 +217,38 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
         }
         
         $result = !empty($full_result) ? $full_result : $text;
-        $translation_cache[$cache_key] = $result;
+        $cache[$cache_key] = $result;
         return $result;
     }
     
-    $translation_cache[$cache_key] = $text;
+    $cache[$cache_key] = $text;
     return $text;
 }
 
-/**
- * Selective text node wrapping with caching
- */
 function multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
-    static $structure_data_cache = null;
-    static $sections_cache = null;
+    static $structure_data = null;
+    static $sections = null;
     
     $replacements_made = 0;
     
-    if ($structure_data_cache === null) {
+    if ($structure_data === null) {
        $structure_file =  get_structure_file_path();
         if (file_exists($structure_file)) {
             $structure_content = file_get_contents($structure_file);
-            $structure_data_cache = json_decode($structure_content, true);
+            $structure_data = json_decode($structure_content, true);
         } else {
-            $structure_data_cache = false;
+            $structure_data = false;
         }
     }
 
-    if (!$structure_data_cache || !is_array($structure_data_cache)) {
+    if (!$structure_data || !is_array($structure_data)) {
         return multilang_wrap_text_nodes($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
     }
 
-    if ($sections_cache === null) {
-        $sections_cache = array();
+    if ($sections === null) {
+        $sections = array();
         
-        foreach ($structure_data_cache as $section => $config) {
+        foreach ($structure_data as $section => $config) {
             if (!is_array($config) || !isset($config['_selectors'])) continue;
             
             $section_method = isset($config['_method']) ? $config['_method'] : 'server';
@@ -289,20 +265,20 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
                 if ($xp) $section_xpath_selectors[] = $xp;
             }
             if (!empty($section_xpath_selectors)) {
-                $sections_cache[$section] = $section_xpath_selectors;
+                $sections[$section] = $section_xpath_selectors;
             }
         }
     }
 
-    if (empty($sections_cache)) {
+    if (empty($sections)) {
         return 0;
     }
 
     $xpath = new DOMXPath($body->ownerDocument);
 
-    uksort($sections_cache, function($a, $b) use ($structure_data_cache) {
-        $a_selectors = isset($structure_data_cache[$a]['_selectors']) ? $structure_data_cache[$a]['_selectors'] : array();
-        $b_selectors = isset($structure_data_cache[$b]['_selectors']) ? $structure_data_cache[$b]['_selectors'] : array();
+    uksort($sections, function($a, $b) use ($structure_data) {
+        $a_selectors = isset($structure_data[$a]['_selectors']) ? $structure_data[$a]['_selectors'] : array();
+        $b_selectors = isset($structure_data[$b]['_selectors']) ? $structure_data[$b]['_selectors'] : array();
         
         $a_has_body = is_array($a_selectors) && in_array('body', $a_selectors);
         $b_has_body = is_array($b_selectors) && in_array('body', $b_selectors);
@@ -313,15 +289,15 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
         return 0;
     });
 
-    foreach ($sections_cache as $section => $section_xpaths) {
+    foreach ($sections as $section => $section_xpaths) {
         $section_current_lang = isset($current_lang_translations[$section]) ? array($section => $current_lang_translations[$section]) : array();
         $section_default_lang = isset($default_lang_translations[$section]) ? array($section => $default_lang_translations[$section]) : array();
         
         $other_section_classes = array();
-        foreach ($sections_cache as $other_section => $other_xpaths) {
+        foreach ($sections as $other_section => $other_xpaths) {
             if ($other_section !== $section) {
-                if (isset($structure_data_cache[$other_section]['_selectors'])) {
-                    foreach ($structure_data_cache[$other_section]['_selectors'] as $sel) {
+                if (isset($structure_data[$other_section]['_selectors'])) {
+                    foreach ($structure_data[$other_section]['_selectors'] as $sel) {
                         if (strpos($sel, '.') === 0) {
                             $other_section_classes[] = substr($sel, 1);
                         }
@@ -331,12 +307,24 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
         }
         
         $javascript_section_classes = array();
-        foreach ($structure_data_cache as $other_section => $config) {
+        
+        $current_section_selectors = isset($structure_data[$section]['_selectors']) ? $structure_data[$section]['_selectors'] : array();
+        $current_section_classes = array();
+        foreach ($current_section_selectors as $sel) {
+            if (strpos($sel, '.') === 0) {
+                $current_section_classes[] = substr($sel, 1);
+            }
+        }
+        
+        foreach ($structure_data as $other_section => $config) {
             if ($other_section !== $section && isset($config['_method']) && $config['_method'] === 'javascript') {
                 if (isset($config['_selectors'])) {
                     foreach ($config['_selectors'] as $sel) {
                         if (strpos($sel, '.') === 0) {
-                            $javascript_section_classes[] = substr($sel, 1);
+                            $class_name = substr($sel, 1);
+                            if (!in_array($class_name, $current_section_classes)) {
+                                $javascript_section_classes[] = $class_name;
+                            }
                         }
                     }
                 }
@@ -350,7 +338,7 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
                     continue;
                 }
                 
-                $replacements_made += multilang_wrap_text_nodes($element, $section_current_lang, $section_default_lang, $current_lang, $default_lang, $javascript_section_classes);
+                $replacements_made += multilang_wrap_text_nodes($element, $section_current_lang, $section_default_lang, $current_lang, $default_lang, $javascript_section_classes, $section);
             }
         }
     }
@@ -384,11 +372,11 @@ function multilang_element_has_class_in_tree($element, $class_name) {
  * Check if element should be skipped
  */
 function multilang_should_skip_element($element) {
-    static $skip_cache = array();
+    static $cache = array();
     
     $cache_key = spl_object_hash($element);
-    if (isset($skip_cache[$cache_key])) {
-        return $skip_cache[$cache_key];
+    if (isset($cache[$cache_key])) {
+        return $cache[$cache_key];
     }
     
     $should_skip = false;
@@ -416,14 +404,11 @@ function multilang_should_skip_element($element) {
         if (!$current_element || $current_element->nodeType !== XML_ELEMENT_NODE) break;
     }
     
-    $skip_cache[$cache_key] = $should_skip;
+    $cache[$cache_key] = $should_skip;
     return $should_skip;
 }
 
-/**
- * Wrap text nodes with translation spans
- */
-function multilang_wrap_text_nodes($element, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes = array()) {
+function multilang_wrap_text_nodes($element, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes = array(), $current_section = '') {
     $skip_tags = array('SCRIPT', 'STYLE', 'CODE', 'PRE', 'BLOCKQUOTE');
     $replacements_made = 0;
     
@@ -491,7 +476,9 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
             }
             
             $translated = multilang_translate_text($original_text, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
-            if ($translated !== $original_text) {
+            
+            // Only wrap if translation contains language spans
+            if ($translated !== $original_text && strpos($translated, 'class="translate lang-') !== false) {
                 $wrapper_html = '<span class="multilang-wrapper" data-original-text="' . esc_attr(trim($original_text)) . '">' . $translated . '</span>';
                 
                 $temp_doc = new DOMDocument();
@@ -515,7 +502,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
                 }
             }
         } elseif ($node->nodeType === XML_ELEMENT_NODE) {
-            $replacements_made += multilang_wrap_text_nodes($node, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes);
+            $replacements_made += multilang_wrap_text_nodes($node, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes, $current_section);
             
             foreach (array('title', 'data-title', 'alt') as $attr) {
                 if ($node->hasAttribute($attr)) {

@@ -1,19 +1,9 @@
 <?php
-/**
- * Multilang Hide Filter - Removes content from non-current language spans
- * This file should ONLY be included when you want to hide non-current languages
- * 
- * Simple logic: Remove content from spans that are NOT the current language
- */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Encode text for data attributes
- */
 function multilang_hide_filter_encode_for_data_attr($text) {
     if (empty($text)) {
         return '';
@@ -35,9 +25,6 @@ function multilang_hide_filter_encode_for_data_attr($text) {
     return substr($json_encoded, 1, -1);
 }
 
-/**
- * Hide non-current language spans
- */
 function multilang_hide_non_current_language($content) {
     if (is_admin() || wp_doing_ajax()) {
         return $content;
@@ -96,7 +83,6 @@ function multilang_hide_non_current_language($content) {
     return $dom->saveHTML();
 }
 
-// Hook the filter to modify page content - run at high priority
 add_filter('the_content', 'multilang_hide_non_current_language', 999);
 add_filter('the_excerpt', 'multilang_hide_non_current_language', 999);
 add_filter('widget_text', 'multilang_hide_non_current_language', 999);

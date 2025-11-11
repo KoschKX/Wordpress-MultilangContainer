@@ -30,11 +30,8 @@ function multilang_generate_css($langs) {
 		$flag = isset($lang['flag']) ? $lang['flag'] : "img/flags/$code.svg";
 		
 		$css .= ".multilang-flags .lang-item > a[lang=\"$code\"] { background-image: url(./$flag) !important; }\n";
-		$css .= ".translate-$code { display: none !important; }\n";
-		$css .= ".translate.lang-$code { display: none !important; }\n";
 		$css .= "html[data-lang=\"$code\"] .multilang-flags .lang-item > a[lang=\"$code\"] { filter: saturate(1) !important; }\n";
-		$css .= "html[data-lang=$code] $not_chain .translate .lang-$code { display: revert !important; }\n";
-		$css .= "html[data-lang=$code] $not_chain .translate.lang-$code { display: revert !important; }\n";
+		$css .= "html[data-lang=$code] $not_chain .translate:not(.lang-$code) { display: none !important; }\n";
 		$css .= "html[data-lang=$code] $not_chain .translate > .wp-block-group:not(.lang-$code):not(.lang-$default_lang) { display: none !important; }\n";
 		
 		if ($code !== $default_lang) {
