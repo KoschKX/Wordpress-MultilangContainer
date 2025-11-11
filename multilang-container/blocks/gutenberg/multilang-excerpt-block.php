@@ -1,19 +1,11 @@
 <?php
-/**
- * Multilang Excerpt Block - Gutenberg Block
- * 
- * Handles the multilang excerpt block registration and rendering
- */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
 
-/**
- * Register the multilang-excerpt block
- */
+// Register block
 function multilang_excerpt_register_block() {
 	wp_register_script(
 		'excerpt-block-editor',
@@ -29,9 +21,7 @@ function multilang_excerpt_register_block() {
 add_action('init', 'multilang_excerpt_register_block');
 
 
-/**
- * Helper function: limit words in HTML, preserving tags
- */
+// Limit words in HTML, preserving tags
 function multilang_limit_words_html($html, $limit, &$truncated = false) {
     if ($limit <= 0) return $html;
     $fragment = '<div>' . $html . '</div>';
@@ -88,12 +78,8 @@ function multilang_limit_words_html($html, $limit, &$truncated = false) {
     return $output;
 }
 
-/**
- * Extract content for a specific language from multilang HTML
- */
+// Extract content for a specific language
 function multilang_extract_language_content($html, $language) {
-	// Match language-specific content within multilang container
-	// Look for spans/divs with lang-{language} class
 	$pattern = '/<(?:span|div)[^>]*class=["\'][^"\']*lang-' . preg_quote($language, '/') . '[^"\']*["\'][^>]*>(.*?)<\/(?:span|div)>/is';
 	
 	if (preg_match($pattern, $html, $matches)) {
@@ -103,9 +89,7 @@ function multilang_extract_language_content($html, $language) {
 	return '';
 }
 
-/**
- * Get the current language (from cookie or default)
- */
+// Get current language from cookie or default
 function get_multilang_current_language() {
 	$default_lang = get_multilang_default_language();
 	
@@ -120,10 +104,7 @@ function get_multilang_current_language() {
 	return $default_lang;
 }
 
-/**
- * Render callback for multilang excerpt block
- * Shows all languages but fills in default language for missing content
- */
+// Render callback
 function multilang_excerpt_render_new($attributes, $content) {
 	global $post;
 	if (empty($post)) return '';
@@ -136,35 +117,30 @@ function multilang_excerpt_render_new($attributes, $content) {
 		if ($block['blockName'] === 'multilang/container') {
 			$html = render_block($block);
 			
-			// Get available languages and default
 			$available_langs = get_multilang_available_languages();
 			$default_lang = get_multilang_default_language();
+			$current_lang = get_multilang_current_language();
 			
-			// Extract default language content for fallback
 			$default_content = multilang_extract_language_content($html, $default_lang);
 			
-			// Find which languages already exist in the HTML
 			$existing_langs = array();
 			preg_match_all('/lang-([a-z]{2})/', $html, $matches);
 			if (!empty($matches[1])) {
 				$existing_langs = $matches[1];
 			}
 			
-			// Process each existing language div and fill in missing content with default language
 			$html = preg_replace_callback(
 				'/(<(?:span|div)[^>]*class=["\'][^"\']*lang-([a-z]{2})[^"\']*["\'][^>]*>)(.*?)(<\/(?:span|div)>)/is',
-				function($matches) use ($wordLimit, $preserveHtml, $default_content, $default_lang) {
+				function($matches) use ($wordLimit, $preserveHtml, $default_content, $default_lang, $current_lang) {
 					$open_tag = $matches[1];
 					$lang = $matches[2];
 					$content = $matches[3];
 					$close_tag = $matches[4];
 					
-					// If content is empty or just whitespace, use default language content
 					if (empty(trim($content))) {
 						$content = $default_content;
 					}
 					
-					// Apply word limiting if specified
 					if ($wordLimit > 0 && !empty(trim($content))) {
 						if ($preserveHtml) {
 							$truncated = false;
@@ -179,18 +155,23 @@ function multilang_excerpt_render_new($attributes, $content) {
 						}
 					}
 					
+					if ($lang !== $current_lang) {
+						$open_tag = preg_replace('/(<(?:span|div)([^>]*)>)/', '$1', $open_tag);
+						if (strpos($open_tag, 'data-translation=') === false) {
+							$open_tag = str_replace('>', ' data-translation="' . esc_attr($content) . '">', $open_tag);
+						}
+						$content = '';
+					}
+					
 					return $open_tag . $content . $close_tag;
 				},
 				$html
 			);
 			
-			// Add missing language divs with default content
 			foreach ($available_langs as $lang) {
 				if (!in_array($lang, $existing_langs)) {
-					// Create content for missing language
 					$fallback_content = $default_content;
 					
-					// Apply word limiting if specified
 					if ($wordLimit > 0 && !empty(trim($fallback_content))) {
 						if ($preserveHtml) {
 							$truncated = false;
@@ -205,13 +186,15 @@ function multilang_excerpt_render_new($attributes, $content) {
 						}
 					}
 					
-					// Add the missing language div - append it safely
-					$missing_div = '<div class="wp-block-group lang-' . $lang . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $fallback_content . '</div>';
+					if ($lang !== $current_lang) {
+						$missing_div = '<div class="wp-block-group lang-' . $lang . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained" data-translation="' . esc_attr($fallback_content) . '"></div>';
+					} else {
+						$missing_div = '<div class="wp-block-group lang-' . $lang . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $fallback_content . '</div>';
+					}
 					$html .= $missing_div;
 				}
 			}
 			
-			// Collect style attributes for block wrapper
 			$style_attrs = array();
 			if (!empty($attributes['style'])) {
 				if (is_string($attributes['style'])) {
@@ -223,16 +206,13 @@ function multilang_excerpt_render_new($attributes, $content) {
 			
 			$wrapper = get_block_wrapper_attributes(array_merge(['class' => 'wp-block-multilang-excerpt'], $style_attrs));
 			
-			// Keep the HTML structure intact - don't remove any wrappers
 			return '<div ' . $wrapper . '>' . $html . '</div>';
 		}
 	}
 	return '';
 }
 
-/**
- * Enqueue CSS for excerpt block
- */
+// Enqueue CSS
 function multilang_excerpt_enqueue_styles() {
     wp_enqueue_style(
         'multilang-excerpt-block',
