@@ -151,11 +151,15 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
         return $text;
     }
     
-    $trimmed_text = trim($text);
+    // Preserve leading and trailing whitespace
+    preg_match('/^(\s*)(.+?)(\s*)$/s', $text, $matches);
+    $leading_space = isset($matches[1]) ? $matches[1] : '';
+    $trimmed_text = isset($matches[2]) ? $matches[2] : trim($text);
+    $trailing_space = isset($matches[3]) ? $matches[3] : '';
     
     $cache_key = md5($trimmed_text . $current_lang . $default_lang);
     if (isset($cache[$cache_key])) {
-        return $cache[$cache_key];
+        return $leading_space . $cache[$cache_key] . $trailing_space;
     }
     
     $current_translation = multilang_find_translation_in_data($trimmed_text, $current_lang_translations);
@@ -168,7 +172,7 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     
     if (strlen($trimmed_text) > 50 && !$current_translation && !$default_translation && !$default_partial_translation) {
         $cache[$cache_key] = $text;
-        return $text;
+        return $leading_space . $text . $trailing_space;
     }
     
     $should_process = $current_translation || $default_translation || $default_partial_translation;
@@ -218,7 +222,7 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
         
         $result = !empty($full_result) ? $full_result : $text;
         $cache[$cache_key] = $result;
-        return $result;
+        return $leading_space . $result . $trailing_space;
     }
     
     $cache[$cache_key] = $text;
