@@ -279,19 +279,16 @@ function multilang_filter_content($content) {
                 $unique_id = uniqid('ml_', true);
                 $replacement_html = '<div id="' . esc_attr($unique_id) . '" class="multilang-container"><div class="multilang-wrapper">' . implode('', $lang_divs) . '</div></div>';
                 
-                // Create replacement node
-                $fragment = $dom->createDocumentFragment();
-                $fragment->appendXML($replacement_html);
+                // Get the original row HTML to replace
+                $row_html = $dom->saveHTML($row_inner);
                 
-                // Replace row_inner with our clean container
-                $row_inner->parentNode->replaceChild($fragment, $row_inner);
+                // Use string replacement instead of DOM manipulation to preserve HTML formatting
+                $content = str_replace($row_html, $replacement_html, $content);
             }
         }
-        
-        // Save back to HTML
-        $content = $dom->saveHTML();
     }
     
+    // Return the modified content without re-parsing the entire document
     return $content;
 }
 add_filter('the_content', 'multilang_filter_content', 999);
