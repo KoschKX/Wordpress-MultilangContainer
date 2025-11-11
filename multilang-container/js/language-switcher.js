@@ -33,6 +33,12 @@
 	if (!lng) { lng = document.documentElement.getAttribute("lang"); }
 	if (!lng) { lng = navigator.language || navigator.userLanguage || "en"; }
 	lng = normalizeLang(lng) || "en";
+	
+	// Remove all language classes and add current one
+	document.body.className = document.body.className.replace(/\blang-[a-z]{2}\b/g, '').trim();
+	document.body.classList.add('lang-' + lng);
+	
+	// Set attributes
 	document.querySelector('html').setAttribute("data-lang", lng);
 	document.querySelector('html').setAttribute("lang", lng);
 	document.body.setAttribute("lang", lng);
@@ -49,6 +55,14 @@
 			var lang = li.querySelector('a').getAttribute('hreflang');
 			lang = window.normalizeLang(lang); 
 			if (!lang) return; 
+			
+			// Remove all language classes from body
+			document.body.className = document.body.className.replace(/\blang-[a-z]{2}\b/g, '').trim();
+			
+			// Add new language class
+			document.body.classList.add('lang-' + lang);
+			
+			// Set attributes
 			document.querySelector('html').setAttribute('data-lang', lang);
 			document.querySelector('html').setAttribute('lang', lang);
 			document.body.setAttribute('lang', lang);
