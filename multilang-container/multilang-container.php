@@ -25,6 +25,7 @@ require_once plugin_dir_path(__FILE__) . 'admin/utilities-admin.php';
 require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
+require_once plugin_dir_path(__FILE__) . 'includes/manager-seo.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 
 require_once plugin_dir_path(__FILE__) . 'demo-usage.php';
