@@ -10,6 +10,16 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Prevent WP Fastest Cache from caching AJAX - run as early as possible
+if (defined('DOING_AJAX') && DOING_AJAX) {
+    if (!defined('DONOTCACHEPAGE')) {
+        define('DONOTCACHEPAGE', true);
+    }
+    if (!defined('DONOTCACHEDB')) {
+        define('DONOTCACHEDB', true);
+    }
+}
+
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
@@ -38,6 +48,8 @@ add_action('init', function() {
         }
         
         if (!multilang_is_ajax_cache_enabled()) {
+            error_log('[Multilang] AJAX detected - preventing cache for action: ' . ($_REQUEST['action'] ?? 'unknown'));
+            
             if (!defined('DONOTCACHEPAGE')) {
                 define('DONOTCACHEPAGE', true);
             }
@@ -56,19 +68,24 @@ add_action('init', function() {
             
             add_action('send_headers', function() {
                 if (wp_doing_ajax()) {
-                    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-                    header('Cache-Control: post-check=0, pre-check=0', false);
-                    header('Pragma: no-cache');
-                    header('Expires: Wed, 11 Jan 1984 05:00:00 GMT');
+                    error_log('[Multilang] Sending no-cache headers for AJAX');
+                    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0', true);
+                    header('Pragma: no-cache', true);
+                    header('Expires: 0', true);
+                    header('X-Accel-Expires: 0', true);
                 }
             }, 999);
             
             // Fix for "load more" showing duplicate posts
             add_action('wp_ajax_get_fusion_blog', function() {
+                error_log('[Multilang] wp_ajax_get_fusion_blog triggered - setting nocache_headers');
                 nocache_headers();
+                header('X-Multilang-Time: ' . time(), true);
             }, 0);
             add_action('wp_ajax_nopriv_get_fusion_blog', function() {
+                error_log('[Multilang] wp_ajax_nopriv_get_fusion_blog triggered - setting nocache_headers');
                 nocache_headers();
+                header('X-Multilang-Time: ' . time(), true);
             }, 0);
         }
     }

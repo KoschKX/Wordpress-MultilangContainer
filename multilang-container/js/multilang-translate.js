@@ -921,6 +921,73 @@
         });
     }
 
+    // Observe new elements and make them visible (for AJAX-loaded content)
+    function observeNewElements() {
+        var structureData = window.multilangLangBar && window.multilangLangBar.structureData ? window.multilangLangBar.structureData : {};
+        var jsSelectors = [];
+        
+        // Get all selectors that use JavaScript translation
+        Object.keys(structureData).forEach(function(sectionName) {
+            var sectionConfig = structureData[sectionName];
+            if (sectionConfig && typeof sectionConfig === 'object') {
+                var sectionMethod = sectionConfig['_method'] || 'server';
+                if (sectionMethod === 'javascript' && sectionConfig['_selectors']) {
+                    var selectors = sectionConfig['_selectors'];
+                    if (Array.isArray(selectors)) {
+                        jsSelectors = jsSelectors.concat(selectors);
+                    }
+                }
+            }
+        });
+        
+        if (jsSelectors.length === 0) return;
+        
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                mutation.addedNodes.forEach(function(node) {
+                    if (node.nodeType !== Node.ELEMENT_NODE) return;
+                    
+                    // Check if this node or its children match any JS selectors
+                    jsSelectors.forEach(function(selector) {
+                        try {
+                            var elements = [];
+                            
+                            // Check if the node itself matches
+                            if (node.matches && node.matches(selector)) {
+                                elements.push(node);
+                            }
+                            
+                            // Find matching children
+                            if (node.querySelectorAll) {
+                                var children = node.querySelectorAll(selector);
+                                elements = elements.concat(Array.from(children));
+                            }
+                            
+                            // Make them visible
+                            elements.forEach(function(el) {
+                                el.style.setProperty('visibility', 'visible', 'important');
+                            });
+                        } catch (e) {
+                            // Invalid selector, skip
+                        }
+                    });
+                });
+            });
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    }
+    
+    // Initialize the observer after DOM is ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', observeNewElements);
+    } else {
+        observeNewElements();
+    }
+
     // Remove invalid excerpts without translation
     function processExcerpt(p) {
         if (p.dataset.checked === "true") return;
