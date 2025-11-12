@@ -3,7 +3,7 @@
 (() => {
     'use strict';
 
-    // Check if hide filter is active - this determines how we handle display styles
+    // hide filter determines display handling
     var hideFilterEnabled = false;
 
     function checkHideFilterStatus() {
@@ -13,7 +13,6 @@
         );
     }
 
-    // Set initial status and update when body becomes available
     if (document.body) {
         hideFilterEnabled = checkHideFilterStatus();
     } else {
@@ -22,7 +21,7 @@
         });
     }
 
-    // Check if JavaScript translation is enabled for any section
+    // bail if server-side only
     if (window.multilangLangBar && window.multilangLangBar.translationMethod === 'server') {
         return;
     }
@@ -30,12 +29,12 @@
     var translations = window.translations || (window.multilangLangBar && window.multilangLangBar.translations) || {};
     var currentLangTranslations = {};
     var defaultLangTranslations = {};
-    var languageCache = {}; // Cache for loaded language files
-    var isTranslationInProgress = false; // Flag to prevent concurrent translations
+    var languageCache = {};
+    var isTranslationInProgress = false;
 
-    // Performance optimization - global caches
-    var elementCache = new Map(); // Cache DOM elements
-    var languageSpansCache = new Map(); // Cache language spans
+    // caches
+    var elementCache = new Map();
+    var languageSpansCache = new Map();
     var performanceCache = {
         hideFilterActive: null,
         hideFilterCheckedAt: 0,
@@ -43,23 +42,18 @@
         wrappersCheckedAt: 0
     };
 
-    // Cache invalidation helper (optimized)
     function invalidateCache() {
-        // Only invalidate what's necessary
         performanceCache.hideFilterActive = null;
         performanceCache.hideFilterCheckedAt = 0;
-        // Keep wrapper cache and element cache for performance
-        languageSpansCache.delete('allTranslateElements'); // Only clear element cache
+        languageSpansCache.delete('allTranslateElements');
     }
 
-    // Fast hide filter check with caching
     function isHideFilterActive() {
         const now = Date.now();
         if (performanceCache.hideFilterActive !== null && (now - performanceCache.hideFilterCheckedAt) < 1000) {
             return performanceCache.hideFilterActive;
         }
 
-        // Use our global variable instead of checking DOM each time
         performanceCache.hideFilterActive = hideFilterEnabled;
         performanceCache.hideFilterCheckedAt = now;
         return performanceCache.hideFilterActive;
@@ -71,54 +65,42 @@
         '.fusion-syntax-highlighter-container'
     ];
 
-    // Helper function to encode content for data attributes (matches PHP encoding from _new plugin)
+    // encode for data attributes - matches PHP side
     function encodeForDataAttr(text) {
         if (!text) return '';
 
-        // Decode any existing HTML entities first
         var decoded = text.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
-        // Check if text is simple (no special chars or quotes)
         if (!/[\u0080-\uFFFF]/.test(decoded) && !/["']/.test(decoded)) {
-            // Simple HTML escaping for basic text
             return decoded.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        // For complex content, use JSON encoding (matches PHP JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_QUOT | JSON_HEX_APOS)
         var json = JSON.stringify(decoded);
-        // Remove surrounding quotes and apply hex encoding for quotes/apostrophes
         var result = json.slice(1, -1).replace(/"/g, '\\u0022').replace(/'/g, '\\u0027');
         return result;
     }
 
-    // Function to decode data attribute content (matches PHP encoding from hide filter)
+    // decode data attributes
     function decodeDataAttr(dataStr) {
         if (!dataStr) return '';
 
-        // Use our global variable instead of checking DOM
         if (hideFilterEnabled) {
-            // Hide filter uses htmlspecialchars, so decode HTML entities
             const textarea = document.createElement('textarea');
             textarea.innerHTML = dataStr;
             return textarea.value;
         } else {
-            // Use the _new plugin style decoding for JavaScript-generated content
             try {
-                // First try direct JSON parse
                 const decoded = JSON.parse('"' + dataStr + '"');
                 return decoded;
             } catch (e) {
-                // Fallback: manually decode HTML entities and Unicode escapes
                 const textarea = document.createElement('textarea');
                 textarea.innerHTML = dataStr;
                 let result = textarea.value;
 
-                // Decode Unicode escapes like \u0022
                 result = result.replace(/\\u([0-9a-fA-F]{4})/g, function(match, code) {
                     return String.fromCharCode(parseInt(code, 16));
                 });
 
-                // Decode HTML entities properly
                 result = result.replace(/&quot;/g, '"')
                     .replace(/&lt;/g, '<')
                     .replace(/&gt;/g, '>')
@@ -129,11 +111,9 @@
         }
     }
 
-    // Helper function to detect if content contains HTML
     function isHTMLContent(content) {
         if (!content || typeof content !== 'string') return false;
 
-        // Check for HTML tags or encoded HTML
         return content.includes('<') ||
             content.includes('&lt;') ||
             content.includes('&gt;') ||
@@ -141,7 +121,6 @@
             content.includes('&#');
     }
 
-    // Helper function to safely insert content as HTML or text
     function safeInsertContent(element, content) {
         if (isHTMLContent(content)) {
             element.innerHTML = content;
@@ -157,11 +136,9 @@
         return match ? match[1] : null;
     }
 
-    // Function to get individual language file from pre-loaded data with caching
+    // get lang file from preloaded data
     function loadLanguageFile(lang, callback) {
-        // Check cache first
         if (languageCache[lang]) {
-            // console.log('Using cached translations for', lang);
             callback(languageCache[lang]);
             return;
         }
@@ -173,21 +150,16 @@
         }
 
         if (languageFiles[lang]) {
-            // console.log('Loaded translations for', lang + ':', languageFiles[lang]);
-            // Cache the language data
             languageCache[lang] = languageFiles[lang];
             callback(languageFiles[lang]);
         } else {
-            // console.log('No translations found for language:', lang);
-            // Cache empty object to avoid repeated lookups
             languageCache[lang] = {};
             callback({});
         }
     }
 
-    // Initialize translations immediately without waiting for DOMContentLoaded to prevent flashing
+    // init early to prevent flash
     function initializeImmediately() {
-        // Preload all available language files into cache
         var languageFiles = window.multilangLangBar && window.multilangLangBar.languageFiles ? window.multilangLangBar.languageFiles : {};
         if (languageFiles) {
             Object.keys(languageFiles).forEach(function(lang) {
@@ -195,14 +167,12 @@
             });
         }
 
-        // Load individual language files instead of using window.translations
         var currentLang = document.documentElement.getAttribute('data-lang') ||
             document.documentElement.getAttribute('lang') ||
             document.body.getAttribute('lang') ||
             'en';
         var defaultLang = window.defaultLanguage || 'en';
 
-        // Set current language translations from cache
         currentLangTranslations = languageCache[currentLang] || {};
         defaultLangTranslations = languageCache[defaultLang] || {};
 
@@ -213,12 +183,10 @@
             runTranslations();
         }
 
-        // Listen for language bar ready event
         document.addEventListener('multilangBarReady', function(e) {
             setupLanguageSwitching();
         });
 
-        // Also add a longer timeout to catch language bar creation
         setTimeout(function() {
             var flags = document.querySelectorAll('.multilang-flags');
             if (flags.length > 0) {
@@ -227,18 +195,12 @@
         }, 2000);
     }
 
-    // Run initialization immediately
     setTimeout(initializeImmediately, 100);
 
     function setupLanguageSwitching() {
-        // Don't create our own language bar - use the one from multilang-container.js
-        // Just add our click handlers to the existing language bar
         setTimeout(function() {
-            // Wait a bit for multilang-container.js to create the language bar
-
-            // If we still don't find anything, let's try a more aggressive search
+            // try to find language links if not already found
             if (jQuery('.multilang-flags li').length === 0) {
-                // Look for ULs that might contain language links
                 jQuery('ul').each(function() {
                     var links = jQuery(this).find('a[hreflang]');
                     if (links.length > 0) {
@@ -248,31 +210,24 @@
             }
             var handlerCount = 0;
             jQuery('.multilang-flags li').each(function() {
-                // Check if our handler is already attached
                 if (jQuery(this).data('translate-handler-attached')) {
                     return;
                 }
 
-                // Remove existing click handlers to avoid conflicts
                 jQuery(this).off('click.translate');
 
-                // Add our enhanced click handler
                 jQuery(this).on('click.translate', function(e) {
-                    // Prevent default link behavior
                     e.preventDefault();
 
-                    // Prevent multiple concurrent translations
                     if (isTranslationInProgress) {
                         return;
                     }
 
                     var lang = jQuery(this).find('a').attr('hreflang');
 
-                    // Add fallback if normalizeLang doesn't exist
                     if (typeof window.normalizeLang === 'function') {
                         lang = window.normalizeLang(lang);
                     } else {
-                        // Simple normalization
                         lang = lang ? lang.toLowerCase() : null;
                     }
 
@@ -280,25 +235,20 @@
 
                     isTranslationInProgress = true;
 
-                    // Update current language data from cache
                     currentLangTranslations = languageCache[lang] || {};
                     var defaultLang = window.defaultLanguage || 'en';
                     defaultLangTranslations = languageCache[defaultLang] || {};
 
-                    // Switch language (this will just show/hide existing spans)
                     switchToLanguage(lang);
                     isTranslationInProgress = false;
                 });
 
-                // Mark as having our handler attached
                 jQuery(this).data('translate-handler-attached', true);
                 handlerCount++;
             });
 
-            // If no language bar found, let's check if multilang-container script is working
             if (handlerCount === 0) {
                 setTimeout(function() {
-                    // Try again after more time
                     var flags = document.querySelectorAll('.multilang-flags');
                     if (flags.length > 0) {
                         setupLanguageSwitching();
@@ -310,27 +260,19 @@
         observeLangTags();
     }
 
-    // This function is no longer needed as we've moved the logic to setupLanguageSwitching and initializeImmediately
-
     function switchToLanguage(lang) {
-        // Update document attributes
         document.documentElement.setAttribute("data-lang", lang);
         document.documentElement.setAttribute("lang", lang);
         document.body.setAttribute("lang", lang);
 
-        // Set cookie
         if (window.setLangCookie) {
             window.setLangCookie(lang);
         }
 
-        // Update language display
         updateLanguageDisplay(lang);
-
-        // Always run translations to ensure JavaScript sections are processed
         runTranslations();
     }
 
-    // Run translations immediately when script loads, not waiting for DOMContentLoaded
     function runTranslations() {
         if (!currentLangTranslations && !defaultLangTranslations) {
             return;
@@ -338,11 +280,9 @@
 
         convertAllLangTags();
 
-        // Get structure data from localized data
         var structureData = window.multilangLangBar && window.multilangLangBar.structureData ? window.multilangLangBar.structureData : {};
 
-        // Group sections by their selectors to avoid conflicts
-        // Sections with the same selectors will have their translations merged
+        // group sections by selectors
         var selectorGroups = {};
         
         Object.keys(structureData).forEach(function(sectionName) {
@@ -352,7 +292,6 @@
                 if (sectionMethod === 'javascript') {
                     var selectors = sectionConfig['_selectors'];
                     if (Array.isArray(selectors) && selectors.length > 0) {
-                        // Create a key from the selectors to group sections
                         var selectorKey = selectors.join('|||');
                         
                         if (!selectorGroups[selectorKey]) {
@@ -383,7 +322,6 @@
                 availableLanguages = Object.keys(window.multilangLangBar.languageFiles);
             }
             
-            // For each language, merge translations from all sections in this group
             availableLanguages.forEach(function(lang) {
                 var langData = languageCache[lang] || {};
                 
@@ -391,13 +329,11 @@
                     mergedTranslations[lang] = {};
                 }
                 
-                // Merge all sections for this language
                 sections.forEach(function(sectionName) {
                     if (langData[sectionName] && typeof langData[sectionName] === 'object') {
                         var sectionData = langData[sectionName];
                         Object.keys(sectionData).forEach(function(key) {
                             if (!key.startsWith('_')) {
-                                // Add to merged translations (later sections won't override earlier ones)
                                 if (!mergedTranslations[lang][key]) {
                                     mergedTranslations[lang][key] = sectionData[key];
                                 }
@@ -412,23 +348,17 @@
             }
         });
 
-        // Set initial language display
         var currentLang = document.documentElement.getAttribute('data-lang') ||
             document.documentElement.getAttribute('lang') ||
             document.body.getAttribute('lang') ||
             'en';
-        // console.log('Setting language display to:', currentLang);
         updateLanguageDisplay(currentLang);
     }
 
-    // Convert <translate-*> tags to <span> with classes
     function convertAllLangTags() {
-        // PERFORMANCE FIX: Instead of scanning ALL elements with jQuery('*'), 
-        // use a targeted selector to find only translate- tags
         var translateElements = document.querySelectorAll('[class*="translate-"], translate-en, translate-de, translate-fr, translate-es, translate-pt, translate-it, translate-nl, translate-pl, translate-ru, translate-zh, translate-ja, translate-ko, translate-ar, translate-hi');
         var tags = new Set();
 
-        // Process only the elements that might be translate tags
         for (let i = 0; i < translateElements.length; i++) {
             var tagName = translateElements[i].tagName.toLowerCase();
             if (tagName.indexOf('translate-') === 0) {
@@ -436,13 +366,12 @@
             }
         }
 
-        // Also check for any custom translate tags using a more specific approach
         var customTranslateTags = document.querySelectorAll('*');
         for (let i = 0; i < customTranslateTags.length; i++) {
             var tagName = customTranslateTags[i].tagName.toLowerCase();
             if (tagName.indexOf('translate-') === 0) {
                 tags.add(tagName);
-                break; // Stop after finding first one to avoid full scan
+                break;
             }
         }
 
@@ -465,7 +394,6 @@
         });
     }
 
-    // Translate a specific widget when it appears
     function translateWidget(trn, target) {
         const observer = new MutationObserver(function(mutations, obs) {
             const wgt = document.querySelector(target);
@@ -520,7 +448,6 @@
             if (wrapper) {
                 // Try to get from wrapper attribute first
                 defaultText = wrapper.getAttribute('data-default-text') || '';
-                // If not present, try to compute from translations
                 if (!defaultText) {
                     var originalText = wrapper.getAttribute('data-original-text');
                     var defaultLang = window.defaultLanguage || 'en';
@@ -543,13 +470,10 @@
             }
             element.setAttribute('data-default-text', defaultText);
 
-            // Always decode data-translation attribute if it exists (for both server and JS entries)
             const dataTranslation = element.getAttribute('data-translation');
             if (dataTranslation && !element.hasAttribute('data-decoded')) {
-                // When hide filter is active, only set innerHTML for current language elements
                 if (hideFilterEnabled) {
                     if (elementLang === newLang) {
-                        // Only decode and set for current language when hide filter is active
                         let decodedContent = decodeDataAttr(dataTranslation);
                         if (!decodedContent || decodedContent === dataTranslation) {
                             decodedContent = dataTranslation.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
@@ -557,12 +481,9 @@
                             });
                         }
                         element.innerHTML = decodedContent;
-                        // Mark as decoded so we don't decode it again
                         element.setAttribute('data-decoded', 'true');
                     }
-                    // Don't set innerHTML for non-current language elements when hide filter is active
                 } else {
-                    // When hide filter is NOT active, set innerHTML for all elements
                     let decodedContent = decodeDataAttr(dataTranslation);
                     if (!decodedContent || decodedContent === dataTranslation) {
                         decodedContent = dataTranslation.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
@@ -570,101 +491,34 @@
                         });
                     }
                     element.innerHTML = decodedContent;
-                    // Mark as decoded so we don't decode it again
                     element.setAttribute('data-decoded', 'true');
                 }
             }
 
-            // Apply display styles to elements with the translate class OR elements nested inside .translate
             if (element.classList.contains('translate') || element.closest('.translate')) {
                 if (elementLang === newLang) {
-                    // Show this element
                     element.style.display = '';
                 } else {
-                    // Hide other language elements
                     element.style.display = 'none';
                 }
             }
         }
 
-        // Update WooCommerce button text
         document.querySelectorAll('[data-multilang-button-wrapped]').forEach(function(button) {
             var translationKey = 'data-text-' + newLang;
             if (button.hasAttribute(translationKey)) {
                 button.textContent = button.getAttribute(translationKey);
             }
         });
-
-        // Check for elements that don't have a translation for the current language
-        // and fall back to showing the original text
-        const multilingualWrappers = document.querySelectorAll('.multilang-wrapper');
-
-        for (let i = 0; i < multilingualWrappers.length; i++) {
-            const wrapper = multilingualWrappers[i];
-            const currentLangElement = wrapper.querySelector('.translate.lang-' + newLang);
-            const visibleElements = wrapper.querySelectorAll('.translate[class*="lang-"]:not([style*="display: none"])');
-
-            // If no element is visible for the current language, show original text
-            if (!currentLangElement || visibleElements.length === 0) {
-                const originalText = wrapper.getAttribute('data-original-text');
-                const defaultText = wrapper.getAttribute('data-default-text');
-                if (originalText) {
-                    // Hide all translation spans
-                    const allTranslateSpans = wrapper.querySelectorAll('.translate[class*="lang-"]');
-                    for (let j = 0; j < allTranslateSpans.length; j++) {
-                        allTranslateSpans[j].style.display = 'none';
-                    }
-
-                    // Create or show a fallback span with original text
-                    let fallbackSpan = wrapper.querySelector('.translate-fallback');
-                    if (!fallbackSpan) {
-                        fallbackSpan = document.createElement('span');
-                        fallbackSpan.className = 'translate-fallback';
-                        
-                        // Find the last translate span and insert after it
-                        const translateSpans = wrapper.querySelectorAll('.translate[class*="lang-"]');
-                        if (translateSpans.length > 0) {
-                            const lastTranslateSpan = translateSpans[translateSpans.length - 1];
-                            // Insert after the last translate span
-                            lastTranslateSpan.parentNode.insertBefore(fallbackSpan, lastTranslateSpan.nextSibling);
-                        } else {
-                            // No translate spans, insert at the beginning
-                            wrapper.insertBefore(fallbackSpan, wrapper.firstChild);
-                        }
-                    }
-                    if (defaultText) {
-                        fallbackSpan.textContent = defaultText;
-                    } else {
-                        fallbackSpan.textContent = originalText;
-                    }
-                    fallbackSpan.style.display = '';
-                } else {
-                    // Hide fallback if we have translations for current language
-                    const fallbackSpan = wrapper.querySelector('.translate-fallback');
-                    if (fallbackSpan) {
-                        fallbackSpan.style.display = 'none';
-                    }
-                }
-            } else {
-                // Hide fallback if we have translations for current language
-                const fallbackSpan = wrapper.querySelector('.translate-fallback');
-                if (fallbackSpan) {
-                    fallbackSpan.style.display = 'none';
-                }
-            }
-        }
     }
 
-    // Helper function to find translation in language data structure (make it available globally)
     function findTranslationInData(text, translationData) {
         if (!translationData || typeof translationData !== 'object') return null;
 
-        // For section-specific translations, directly check for the key
         if (translationData[text]) {
             return translationData[text];
         }
 
-        // Fallback: if it's still the old structure, search through categories
         for (var category in translationData) {
             if (translationData.hasOwnProperty(category) && typeof translationData[category] === 'object') {
                 if (translationData[category][text]) {
@@ -676,14 +530,12 @@
         return null;
     }
 
-    // Core translation function
     function translateLang(sectionTranslations, targets) {
         targets = targets || ['body'];
         if (!sectionTranslations) {
             return;
         }
 
-        // Clean up any nested multilang-wrapper structures first
         cleanupNestedWrappers();
 
         var elements = [];
@@ -695,7 +547,6 @@
             else if (t instanceof NodeList || Array.isArray(t)) elements = elements.concat(Array.from(t));
         });
 
-        // Filter out excluded selectors and already processed elements
         elements = elements.filter(el => {
             return !excludedSelectors.some(sel => el.closest(sel)) &&
                 !el.closest('.multilang-wrapper') &&
@@ -703,7 +554,6 @@
                 !el.hasAttribute('data-multilang-processed');
         });
         
-        // Cache for this translation run
         var translationCache = {};
         var currentLang = document.documentElement.getAttribute('data-lang') ||
             document.documentElement.getAttribute('lang') ||
@@ -715,12 +565,10 @@
         function translateText(text, sectionTranslations) {
             if (!text.trim()) return text;
             
-            // Check cache first
             if (translationCache[text]) {
                 return translationCache[text];
             }
 
-            // Look for translations in this section's data across all languages
             var allTranslations = {};
             availableLanguages.forEach(function(lang) {
                 var langTranslations = sectionTranslations[lang] || {};
@@ -732,45 +580,28 @@
             if (Object.keys(allTranslations).length > 0) {
                 var allSpans = '';
                 var hasCurrentLangTranslation = false;
+                
+                var defaultLangTranslation = allTranslations[defaultLang] || text;
 
-                // Create spans for all available languages that have translations
                 availableLanguages.forEach(function(lang) {
-                    if (allTranslations[lang]) {
-                        var display = '';
-                        if (!hideFilterEnabled) {
-                            // Only add display styles if hide filter is NOT active
-                            display = (lang === currentLang) ? '' : 'none';
-                        }
+                    var display = '';
+                    if (!hideFilterEnabled) {
+                        display = (lang === currentLang) ? '' : 'none';
+                    }
 
-                        if (lang === currentLang) {
-                            hasCurrentLangTranslation = true;
-                        }
+                    if (lang === currentLang && allTranslations[lang]) {
+                        hasCurrentLangTranslation = true;
+                    }
 
-                        if (hideFilterEnabled) {
-                            // When hide filter is active, don't add display styles - let PHP handle it
-                            var encoded_content = encodeForDataAttr(allTranslations[lang]);
-                            allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '">' + allTranslations[lang] + '</span>';
-                        } else {
-                            // When hide filter is not active, use display styles
-                            var encoded_content = encodeForDataAttr(allTranslations[lang]);
-                            allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" style="display: ' + display + ';">' + allTranslations[lang] + '</span>';
-                        }
+                    var translation = allTranslations[lang] || defaultLangTranslation;
+                    var encoded_content = encodeForDataAttr(translation);
+                    
+                    if (hideFilterEnabled) {
+                        allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '">' + translation + '</span>';
+                    } else {
+                        allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" style="display: ' + display + ';">' + translation + '</span>';
                     }
                 });
-
-                // If no translation for current language, show default language or fallback to original
-                if (!hasCurrentLangTranslation) {
-                    if (allTranslations[defaultLang]) {
-                        // Update display to show default language
-                        allSpans = allSpans.replace(
-                            'lang-' + defaultLang + '" style="display: none;"',
-                            'lang-' + defaultLang + '" style=""'
-                        );
-                    } else {
-                        // No translation for current or default language - add fallback span
-                        allSpans += '<span class="translate-fallback" style="">' + text + '</span>';
-                    }
-                }
 
                 return allSpans || text;
             }
@@ -801,44 +632,34 @@
                     
                     // Get the clean token (without punctuation) for data-original-text
                     var originalToken = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+                    
+                    // Get default language translation for fallback
+                    var defaultTokenTranslation = tokenTranslations[defaultLang] || token;
 
-                    // Create spans for all languages that have this token
+                    // Create spans for ALL available languages (not just ones with translations)
                     availableLanguages.forEach(function(lang) {
-                        if (tokenTranslations[lang]) {
-                            var display = '';
-                            if (!hideFilterEnabled) {
-                                // Only add display styles if hide filter is NOT active
-                                display = (lang === currentLang) ? '' : 'none';
-                            }
+                        var display = '';
+                        if (!hideFilterEnabled) {
+                            // Only add display styles if hide filter is NOT active
+                            display = (lang === currentLang) ? '' : 'none';
+                        }
 
-                            if (lang === currentLang) {
-                                hasCurrentLangTokenTranslation = true;
-                            }
+                        if (lang === currentLang && tokenTranslations[lang]) {
+                            hasCurrentLangTokenTranslation = true;
+                        }
 
-                            if (hideFilterEnabled) {
-                                // When hide filter is active, don't add display styles - let PHP handle it
-                                var encoded_content = encodeForDataAttr(tokenTranslations[lang]);
-                                tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '">' + tokenTranslations[lang] + '</span>';
-                            } else {
-                                // When hide filter is not active, use display styles  
-                                var encoded_content = encodeForDataAttr(tokenTranslations[lang]);
-                                tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '" style="display: ' + display + ';">' + tokenTranslations[lang] + '</span>';
-                            }
+                        // Use actual translation if exists, otherwise use default language translation
+                        var translation = tokenTranslations[lang] || defaultTokenTranslation;
+                        var encoded_content = encodeForDataAttr(translation);
+
+                        if (hideFilterEnabled) {
+                            // When hide filter is active, don't add display styles - let PHP handle it
+                            tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '">' + translation + '</span>';
+                        } else {
+                            // When hide filter is not active, use display styles
+                            tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '" style="display: ' + display + ';">' + translation + '</span>';
                         }
                     });
-
-                    // If no translation for current language, show default language or fallback to original
-                    if (!hasCurrentLangTokenTranslation) {
-                        if (tokenTranslations[defaultLang]) {
-                            tokenSpans = tokenSpans.replace(
-                                'lang-' + defaultLang + '" style="display: none;"',
-                                'lang-' + defaultLang + '" style=""'
-                            );
-                        } else {
-                            // No translation for current or default language - add fallback
-                            tokenSpans += '<span class="translate-fallback" style="">' + token + '</span>';
-                        }
-                    }
 
                     result += tokenSpans || token;
                 } else {
