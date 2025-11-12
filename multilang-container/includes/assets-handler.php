@@ -120,12 +120,53 @@ function multilang_container_enqueue_scripts() {
 	
 	// Conditionally enqueue translation script if any section uses JavaScript
 	if ($has_javascript_sections) {
+		// Add inline CSS to hide JS-translated sections until processed
+		$hide_css = '';
+		if ($structure_data && is_array($structure_data)) {
+			$selectors = array();
+			foreach ($structure_data as $section => $config) {
+				$section_method = isset($config['_method']) ? $config['_method'] : 'server';
+				if ($section_method === 'javascript' && isset($config['_selectors']) && is_array($config['_selectors'])) {
+					$selectors = array_merge($selectors, $config['_selectors']);
+				}
+			}
+			if (!empty($selectors)) {
+				$selectors = array_unique($selectors);
+				$hide_css = implode(', ', $selectors) . ' { visibility: hidden; }';
+				wp_add_inline_style('multilang-container-css', $hide_css);
+			}
+		}
+		
 		wp_enqueue_script(
 			'multilang-translate-js',
 			plugins_url('js/multilang-translate.js', dirname(__FILE__)),
 			array('multilang-container-js'),
 			filemtime(plugin_dir_path(dirname(__FILE__)) . 'js/multilang-translate.js'),
 			true
+		);
+		
+		// Add inline script to run translation immediately when script loads and unhide content
+		$inline_js = '
+		if (typeof window.multilangRunTranslationsNow === "function") { 
+			window.multilangRunTranslationsNow(); 
+		}';
+		if (!empty($selectors)) {
+			$escaped_selectors = array_map('esc_js', $selectors);
+			$inline_js .= '
+		// Unhide content after translation
+		setTimeout(function() {
+			var selectors = ' . json_encode($escaped_selectors) . ';
+			selectors.forEach(function(sel) {
+				var els = document.querySelectorAll(sel);
+				els.forEach(function(el) { el.style.visibility = "visible"; });
+			});
+		}, 100);';
+		}
+		
+		wp_add_inline_script(
+			'multilang-translate-js',
+			$inline_js,
+			'after'
 		);
 	}
 	

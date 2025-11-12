@@ -182,6 +182,7 @@
         } else {
             runTranslations();
         }
+        runTranslations();
 
         document.addEventListener('multilangBarReady', function(e) {
             setupLanguageSwitching();

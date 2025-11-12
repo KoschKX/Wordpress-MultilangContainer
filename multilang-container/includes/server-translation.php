@@ -124,8 +124,12 @@ function multilang_find_translation_in_data($text, $data) {
 }
 
 function multilang_translate_text($text, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
-    static $cache = array();
+    static $call_count = 0;
+    static $translations = null;
+    static $lang_cache = array();
     static $langs = null;
+    
+    $call_count++;
     
     if (empty(trim($text))) {
         return $text;
@@ -178,17 +182,24 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
                         ($default_partial_translation ? $default_partial_translation : $trimmed_text);
         
         foreach ($langs as $lang) {
+            // Get the full language file data for this language
+            $lang_file_data = multilang_get_language_data($lang);
             $lang_data = array();
             
+            // Extract only the sections that are in current_lang_translations
             if (is_array($current_lang_translations)) {
                 foreach ($current_lang_translations as $category => $translations) {
                     if ($category !== '_selectors' && $category !== '_collapsed' && $category !== '_method') {
-                        $lang_file_data = multilang_get_language_data($lang);
                         if (isset($lang_file_data[$category])) {
                             $lang_data[$category] = $lang_file_data[$category];
                         }
                     }
                 }
+            }
+            
+            // If no section-specific data, use the full language file
+            if (empty($lang_data)) {
+                $lang_data = $lang_file_data;
             }
             
             $lang_translation = multilang_find_translation_in_data($trimmed_text, $lang_data);
@@ -750,14 +761,16 @@ function multilang_process_partial_translation($text, $lang_data) {
     foreach ($lang_data as $category => $keys) {
         if (is_array($keys)) {
             foreach ($keys as $source => $translation) {
-                // Skip empty translations
-                if (empty(trim($translation))) {
+                // Skip empty translations or non-string keys
+                if (empty(trim($translation)) || !is_string($source)) {
                     continue;
                 }
                 
-                // Look for word boundaries to avoid partial word replacements
-                if (preg_match('/\b' . preg_quote($source, '/') . '\b/i', $text)) {
-                    $translated_text = preg_replace('/\b' . preg_quote($source, '/') . '\b/i', $translation, $translated_text);
+                // Use Unicode word boundaries for better matching with special characters
+                // This will match "Sep" in "« Sep" or "Sep »"
+                $pattern = '/(?<=^|[\s\p{P}\p{Z}])' . preg_quote($source, '/') . '(?=[\s\p{P}\p{Z}]|$)/ui';
+                if (preg_match($pattern, $text)) {
+                    $translated_text = preg_replace($pattern, $translation, $translated_text);
                     $found_translation = true;
                 }
             }
