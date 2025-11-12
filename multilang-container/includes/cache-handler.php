@@ -1,9 +1,5 @@
 <?php
-/**
- * Multilang Container - Cache Handler
- * 
- * File-based caching for translated content
- */
+// File-based caching for translated content
 
 if (!defined('ABSPATH')) {
     exit;
@@ -509,6 +505,15 @@ function multilang_get_cached_page_content($lang) {
  */
 function multilang_set_cached_page_content($lang, $content) {
     if (!multilang_is_cache_enabled()) {
+        return false;
+    }
+    
+    // Never cache AJAX responses
+    if (defined('DOING_AJAX') && DOING_AJAX) {
+        return false;
+    }
+    
+    if (function_exists('wp_doing_ajax') && wp_doing_ajax()) {
         return false;
     }
     

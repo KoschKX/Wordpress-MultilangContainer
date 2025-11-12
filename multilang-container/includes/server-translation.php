@@ -362,9 +362,6 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
     return $replacements_made;
 }
 
-/**
- * Check if element or parent has specific class
- */
 function multilang_element_has_class_in_tree($element, $class_name) {
     $current = $element;
     $depth = 0;
@@ -384,9 +381,6 @@ function multilang_element_has_class_in_tree($element, $class_name) {
     return false;
 }
 
-/**
- * Check if element should be skipped
- */
 function multilang_should_skip_element($element) {
     static $cache = array();
     
@@ -536,9 +530,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
     return $replacements_made;
 }
 
-/**
- * Process entire page HTML output
- */
+// Page translation - buffers output and processes entire HTML
 static $multilang_translation_cache = null;
 
 function multilang_start_page_buffer() {
@@ -546,7 +538,23 @@ function multilang_start_page_buffer() {
         return;
     }
     
-    // Use cached structure data
+    // Don't buffer AJAX - check multiple ways
+    if ( defined('DOING_AJAX') && DOING_AJAX ) {
+        return;
+    }
+    
+    if ( function_exists('wp_doing_ajax') && wp_doing_ajax() ) {
+        return;
+    }
+    
+    if ( !empty($_REQUEST['action']) || !empty($_POST['action']) || !empty($_GET['action']) ) {
+        return;
+    }
+    
+    if ( !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest' ) {
+        return;
+    }
+    
     $structure_data = multilang_get_cached_structure_data();
     $has_server_sections = false;
     
@@ -578,6 +586,14 @@ function multilang_process_entire_page($html) {
         return $html;
     }
     
+    if ( defined('DOING_AJAX') && DOING_AJAX ) {
+        return $html;
+    }
+    
+    if ( wp_doing_ajax() ) {
+        return $html;
+    }
+    
     if (strlen($html) < 100) {
         return $html;
     }
@@ -606,9 +622,6 @@ function multilang_process_entire_page($html) {
     return $processed_html;
 }
 
-/**
- * Check if text has translation in ANY language file
- */
 function multilang_text_has_any_translation($text) {
     $available_langs = get_multilang_available_languages();
     $trimmed_text = trim($text);
@@ -622,9 +635,6 @@ function multilang_text_has_any_translation($text) {
     return false;
 }
 
-/**
- * Check if text contains translatable words
- */
 function multilang_text_contains_translatable_words($text) {
     static $all_translatable_words = null;
     
@@ -699,9 +709,6 @@ function multilang_translate_partial_text($text, $lang_data) {
     return $has_translation ? $result : null;
 }
 
-/**
- * Get all container selectors from structure.json
- */
 function multilang_get_all_container_selectors() {
     static $all_selectors = null;
     
@@ -727,9 +734,6 @@ function multilang_get_all_container_selectors() {
     return $all_selectors;
 }
 
-/**
- * Convert CSS selectors to XPath
- */
 function multilang_css_to_xpath($selector) {
     if (preg_match('/^\.([a-zA-Z0-9_-]+)$/', $selector, $matches)) {
         return "//*[contains(concat(' ', normalize-space(@class), ' '), ' " . $matches[1] . " ')]";

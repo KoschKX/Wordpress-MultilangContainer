@@ -1,21 +1,13 @@
 <?php
-/**
- * Multilang Container - Cache Folder Monitor
- * 
- * Monitors external cache folders
- */
+// Cache folder monitor - watches external cache plugins and syncs
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Get cache folders to monitor
- */
 function multilang_get_cache_folders_to_monitor() {
     $folders = array();
     
-    // Main WP cache folder
     $main_cache = WP_CONTENT_DIR . '/cache/';
     if (is_dir($main_cache)) {
         $folders[] = $main_cache;
@@ -24,9 +16,6 @@ function multilang_get_cache_folders_to_monitor() {
     return $folders;
 }
 
-/**
- * Get folder modification time
- */
 function multilang_get_folder_mtime($folder_path) {
     if (!is_dir($folder_path)) {
         return 0;
@@ -35,9 +24,6 @@ function multilang_get_folder_mtime($folder_path) {
     return filemtime($folder_path);
 }
 
-/**
- * Check if cache folders have changed
- */
 function multilang_check_cache_folder_changes() {
     $folders = multilang_get_cache_folders_to_monitor();
     
@@ -53,38 +39,33 @@ function multilang_check_cache_folder_changes() {
         $current_mtime = multilang_get_folder_mtime($folder);
         $current_mtimes[$folder] = $current_mtime;
         
-        // Check if folder changed
         if (isset($stored_mtimes[$folder]) && $stored_mtimes[$folder] !== $current_mtime) {
             $cache_was_cleared = true;
+            if (multilang_is_cache_debug_logging_enabled()) {
+                error_log('[Multilang Cache] /wp-content/cache/ folder changed - clearing Multilang cache');
+            }
         }
     }
     
+    update_option('multilang_cache_folder_mtimes', $current_mtimes, false);
+    
     if ($cache_was_cleared) {
-        if (multilang_is_cache_debug_logging_enabled()) {
-            error_log('[Multilang Cache] External cache cleared - clearing Multilang cache');
-        }
         multilang_clear_all_cache();
-        
-        // Update stored mtimes after clearing
-        update_option('multilang_cache_folder_mtimes', $current_mtimes, false);
     }
     
     return $cache_was_cleared;
 }
 
-/**
- * Monitor cache folders on init
- */
 function multilang_init_cache_folder_monitor() {
     multilang_check_cache_folder_changes();
 }
 add_action('init', 'multilang_init_cache_folder_monitor', 999);
 
-/**
- * Hook into WPFC clear actions
- */
 function multilang_hook_wpfc_clear() {
+    // Clear multilang cache when WPFC clears cache
     add_action('wpfc_clear_all_cache', 'multilang_clear_all_cache');
+    add_action('wpfc_clear_cache_of_allsites', 'multilang_clear_all_cache');
+    add_action('wpfc_delete_cache', 'multilang_clear_all_cache');
     
     // Exclude AJAX requests from being cached by WPFC - priority 1 to run early
     add_filter('wpfc_is_cacheable', function($cacheable) {
@@ -96,9 +77,20 @@ function multilang_hook_wpfc_clear() {
 }
 add_action('plugins_loaded', 'multilang_hook_wpfc_clear', 1);
 
-/**
- * Init cache folder mtimes on activation
- */
+// Hook into other popular cache plugins
+function multilang_hook_other_cache_plugins() {
+    add_action('w3tc_flush_all', 'multilang_clear_all_cache');
+    add_action('w3tc_flush_posts', 'multilang_clear_all_cache');
+    add_action('wp_cache_cleared', 'multilang_clear_all_cache');
+    add_action('litespeed_purged_all', 'multilang_clear_all_cache');
+    add_action('after_rocket_clean_domain', 'multilang_clear_all_cache');
+    add_action('rocket_purge_cache', 'multilang_clear_all_cache');
+    add_action('autoptimize_action_cachepurged', 'multilang_clear_all_cache');
+    add_action('ce_clear_cache', 'multilang_clear_all_cache');
+    add_action('comet_cache_wipe_cache', 'multilang_clear_all_cache');
+}
+add_action('plugins_loaded', 'multilang_hook_other_cache_plugins', 1);
+
 function multilang_init_cache_mtimes() {
     if (!get_option('multilang_cache_folder_mtimes')) {
         $folders = multilang_get_cache_folders_to_monitor();
@@ -113,9 +105,6 @@ function multilang_init_cache_mtimes() {
 }
 add_action('admin_init', 'multilang_init_cache_mtimes');
 
-/**
- * Update mtimes after cache clear
- */
 function multilang_update_cache_mtimes_after_clear() {
     $folders = multilang_get_cache_folders_to_monitor();
     $mtimes = array();
