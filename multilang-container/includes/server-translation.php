@@ -127,6 +127,7 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     static $call_count = 0;
     static $translations = null;
     static $lang_cache = array();
+    static $langs = null;
     
     $call_count++;
     
