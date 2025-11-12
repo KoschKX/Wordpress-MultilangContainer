@@ -811,35 +811,16 @@
             });
         }
 
-        // Batch process elements in chunks to avoid blocking
-        var chunkSize = 10;
-        var currentIndex = 0;
+        // Process all elements at once for faster translation
+        elements.forEach(function(el) {
+            el.setAttribute('data-multilang-processed', 'true');
+            wrapTextNodes(el);
+            // Override CSS visibility rule after translation
+            el.style.setProperty('visibility', 'visible', 'important');
+        });
         
-        function processNextChunk() {
-            var endIndex = Math.min(currentIndex + chunkSize, elements.length);
-            
-            for (var i = currentIndex; i < endIndex; i++) {
-                var el = elements[i];
-                el.setAttribute('data-multilang-processed', 'true');
-                wrapTextNodes(el);
-                // Override CSS visibility rule after translation
-                el.style.visibility = "visible";
-                el.style.setProperty('visibility', 'visible', 'important');
-            }
-            
-            currentIndex = endIndex;
-            
-            if (currentIndex < elements.length) {
-                requestAnimationFrame(processNextChunk);
-            } else {
-                // Handle WooCommerce buttons after all elements are processed
-                wrapWooCommerceButtons(elements, sectionTranslations);
-            }
-        }
-        
-        if (elements.length > 0) {
-            requestAnimationFrame(processNextChunk);
-        }
+        // Handle WooCommerce buttons after all elements are processed
+        wrapWooCommerceButtons(elements, sectionTranslations);
     }
     
     // Special handling for WooCommerce buttons to avoid React conflicts

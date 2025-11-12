@@ -127,7 +127,6 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     static $call_count = 0;
     static $translations = null;
     static $lang_cache = array();
-    static $langs = null;
     
     $call_count++;
     
@@ -137,6 +136,16 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     
     if (strpos($text, 'multilang-wrapper') !== false || strpos($text, 'class="translate') !== false) {
         return $text;
+    }
+    
+    // Debug logging for specific words
+    $debug_words = array('Sep', 'Categories', '« Sep');
+    $trimmed_for_debug = trim($text);
+    if (in_array($trimmed_for_debug, $debug_words) || strpos($trimmed_for_debug, 'Sep') !== false || strpos($trimmed_for_debug, 'Categories') !== false) {
+        error_log("MULTILANG DEBUG: Processing text: '" . $trimmed_for_debug . "'");
+        error_log("MULTILANG DEBUG: Current lang: " . $current_lang . ", Default lang: " . $default_lang);
+        error_log("MULTILANG DEBUG: Current lang translations sections: " . print_r(array_keys($current_lang_translations), true));
+        error_log("MULTILANG DEBUG: Default lang translations sections: " . print_r(array_keys($default_lang_translations), true));
     }
     
     // Preserve leading and trailing whitespace
@@ -206,6 +215,14 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
             
             if (!$lang_translation && strlen($trimmed_text) <= 50) {
                 $lang_translation = multilang_process_partial_translation($trimmed_text, $lang_data);
+                
+                // Debug logging
+                if (in_array($trimmed_text, $debug_words) || strpos($trimmed_text, 'Sep') !== false || strpos($trimmed_text, 'Categories') !== false) {
+                    error_log("MULTILANG DEBUG: Lang '$lang' - partial translation result: " . ($lang_translation ? $lang_translation : 'NULL'));
+                    if (!$lang_translation) {
+                        error_log("MULTILANG DEBUG: Lang '$lang' - lang_data sections: " . print_r(array_keys($lang_data), true));
+                    }
+                }
             }
             
             if (!$lang_translation) {
@@ -414,8 +431,10 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
         return 0;
     }
     
-    if (!empty($javascript_section_classes) && $element->hasAttribute('class')) {
-        $element_classes = $element->getAttribute('class');
+    $element_has_class = $element->hasAttribute('class');
+    $element_classes = $element_has_class ? $element->getAttribute('class') : '';
+    
+    if (!empty($javascript_section_classes) && $element_has_class) {
         foreach ($javascript_section_classes as $js_class) {
             if (strpos($element_classes, $js_class) !== false) {
                 return 0;
@@ -423,7 +442,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
         }
     }
     
-    if ($element->hasAttribute('class') && strpos($element->getAttribute('class'), 'multilang-wrapper') !== false) {
+    if ($element_has_class && strpos($element_classes, 'multilang-wrapper') !== false) {
         return 0;
     }
     
@@ -439,15 +458,14 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
         $parent = $parent->parentNode;
     }
     
-    if ($element->hasAttribute('class')) {
-        $classes = $element->getAttribute('class');
-        if (strpos($classes, 'token') !== false || 
-            strpos(strtolower($classes), 'code') !== false ||
-            strpos($classes, 'no-translate') !== false) {
+    if ($element_has_class) {
+        if (strpos($element_classes, 'token') !== false || 
+            strpos(strtolower($element_classes), 'code') !== false ||
+            strpos($element_classes, 'no-translate') !== false) {
             return 0;
         }
         
-        if (strpos($classes, 'translate') !== false) {
+        if (strpos($element_classes, 'translate') !== false) {
             return 0;
         }
     }
