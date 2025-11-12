@@ -121,7 +121,7 @@ function multilang_container_enqueue_scripts() {
 	// Conditionally enqueue translation script if any section uses JavaScript
 	if ($has_javascript_sections) {
 		// Add inline CSS to hide JS-translated sections until processed
-		/*
+
 		$hide_css = '';
 		if ($structure_data && is_array($structure_data)) {
 			$selectors = array();
@@ -137,7 +137,6 @@ function multilang_container_enqueue_scripts() {
 				wp_add_inline_style('multilang-container-css', $hide_css);
 			}
 		}
-		*/
 		
 		wp_enqueue_script(
 			'multilang-translate-js',

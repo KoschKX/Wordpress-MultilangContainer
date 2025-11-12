@@ -355,10 +355,6 @@
             'en';
         updateLanguageDisplay(currentLang);
         
-        // Unhide content after translations are complete
-        if (typeof window.multilangUnhideContent === 'function') {
-            window.multilangUnhideContent();
-        }
     }
 
     function convertAllLangTags() {
@@ -826,6 +822,8 @@
                 var el = elements[i];
                 el.setAttribute('data-multilang-processed', 'true');
                 wrapTextNodes(el);
+                // Override CSS visibility rule after translation
+                el.style.setProperty('visibility', 'visible', 'important');
             }
             
             currentIndex = endIndex;
