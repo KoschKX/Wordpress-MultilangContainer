@@ -145,43 +145,6 @@ function multilang_container_enqueue_scripts() {
 			filemtime(plugin_dir_path(dirname(__FILE__)) . 'js/multilang-translate.js'),
 			true
 		);
-		
-		// Add inline script to run translation immediately when script loads and unhide content
-		/*
-		$inline_js = '
-		if (typeof window.multilangRunTranslationsNow === "function") { 
-			window.multilangRunTranslationsNow(); 
-		}';
-		if (!empty($selectors)) {
-			$escaped_selectors = array_map('esc_js', $selectors);
-			$inline_js .= '
-		// Create global unhide function
-		window.multilangUnhideContent = function() {
-			var selectors = ' . json_encode($escaped_selectors) . ';
-			selectors.forEach(function(sel) {
-				var els = document.querySelectorAll(sel);
-				els.forEach(function(el) { 
-					el.style.visibility = "visible";
-					el.style.setProperty("visibility", "visible", "important");
-				});
-			});
-		};
-		// Unhide immediately after a short delay
-		// setTimeout(window.multilangUnhideContent, 0);
-		// Unhide on DOMContentLoaded
-		if (document.readyState === "loading") {
-			document.addEventListener("DOMContentLoaded", window.multilangUnhideContent);
-		}
-		// Final unhide on window load
-		window.addEventListener("load", window.multilangUnhideContent);';
-		}
-		
-		wp_add_inline_script(
-			'multilang-translate-js',
-			$inline_js,
-			'after'
-		);
-		*/
 	}
 	
 	// Language switcher script is now enqueued in language-switcher.php

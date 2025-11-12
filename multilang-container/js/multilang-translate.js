@@ -823,6 +823,7 @@
                 el.setAttribute('data-multilang-processed', 'true');
                 wrapTextNodes(el);
                 // Override CSS visibility rule after translation
+                el.style.visibility = "visible";
                 el.style.setProperty('visibility', 'visible', 'important');
             }
             
