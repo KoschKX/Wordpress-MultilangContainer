@@ -35,6 +35,42 @@ function multilang_is_ajax_cache_enabled() {
     return false;
 }
 
+function multilang_is_page_excluded_from_cache() {
+    $options = get_option('multilang_container_cache_exclude_pages');
+    
+    if ($options === false) {
+        $json_options = multilang_get_options();
+        $options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
+    }
+    
+    if (empty($options)) {
+        return false;
+    }
+    
+    // Get current page path
+    $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    
+    // Parse comma-separated list
+    $excluded_pages = array_map('trim', explode(',', $options));
+    
+    foreach ($excluded_pages as $excluded) {
+        if (empty($excluded)) {
+            continue;
+        }
+        
+        // Remove leading/trailing slashes for comparison
+        $excluded = trim($excluded, '/');
+        $current = trim($current_path, '/');
+        
+        // Check if current path matches or starts with excluded path
+        if ($current === $excluded || strpos($current, $excluded) === 0) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 function multilang_is_cache_enabled() {
     $options = get_option('multilang_container_cache_enabled');
     
@@ -386,6 +422,11 @@ function multilang_get_cached_language_data($lang) {
  */
 function multilang_get_page_cache_key() {
     global $post;
+    
+    // Don't cache excluded pages
+    if (multilang_is_page_excluded_from_cache()) {
+        return false;
+    }
     
     // Don't cache AJAX requests unless explicitly enabled
     if (wp_doing_ajax() && !multilang_is_ajax_cache_enabled()) {
