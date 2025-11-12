@@ -14,15 +14,10 @@ if (!defined('ABSPATH')) {
  * Add Multilang menu to admin bar
  */
 function multilang_add_admin_bar_menu($wp_admin_bar) {
-    // Temporarily disabled
-    return;
-    
-    // Only show to users who can manage options
     if (!current_user_can('manage_options')) {
         return;
     }
     
-    // Don't show in admin area
     if (is_admin()) {
         return;
     }
@@ -285,6 +280,7 @@ function multilang_admin_bar_css() {
     }
     ?>
     <style>
+
         #wp-admin-bar-multilang-container .ab-item {
             font-weight: 600;
         }
@@ -305,6 +301,12 @@ function multilang_admin_bar_css() {
         #wp-admin-bar-multilang-separator-2:hover {
             background: transparent;
         }
+
+        /* HIDE FOR NOW */
+        #wp-admin-bar-multilang-container{
+            display: none !important;
+        }
+
     </style>
     <?php
 }
