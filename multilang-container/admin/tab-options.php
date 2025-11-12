@@ -32,6 +32,62 @@ function multilang_save_options($options) {
     file_put_contents($file_path, $json_content);
 }
 
+/**
+ * AJAX handler to save cache settings
+ */
+function multilang_ajax_save_cache_settings() {
+    // Check permissions
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Permission denied.'));
+        return;
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'multilang_cache_settings_nonce')) {
+        wp_send_json_error(array('message' => 'Invalid nonce.'));
+        return;
+    }
+    
+    // Get and save settings
+    $options = multilang_get_options();
+    $options['cache_enabled'] = isset($_POST['cache_enabled']) ? intval($_POST['cache_enabled']) : 0;
+    $options['cache_debug_logging'] = isset($_POST['cache_debug_logging']) ? intval($_POST['cache_debug_logging']) : 0;
+    multilang_save_options($options);
+    
+    // Also save to WordPress options for faster access
+    update_option('multilang_container_cache_enabled', $options['cache_enabled']);
+    update_option('multilang_container_cache_debug_logging', $options['cache_debug_logging']);
+    
+    wp_send_json_success(array('message' => 'Settings saved successfully.'));
+}
+add_action('wp_ajax_multilang_save_cache_settings', 'multilang_ajax_save_cache_settings');
+
+/**
+ * AJAX handler to clear cache
+ */
+function multilang_ajax_clear_cache_option() {
+    // Check permissions
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(array('message' => 'Permission denied.'));
+        return;
+    }
+    
+    // Verify nonce
+    if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'multilang_cache_nonce')) {
+        wp_send_json_error(array('message' => 'Invalid nonce.'));
+        return;
+    }
+    
+    // Clear cache
+    $deleted_count = multilang_clear_all_cache();
+    
+    wp_send_json_success(array(
+        'message' => sprintf(__('%d cache files cleared successfully.', 'multilang-container'), $deleted_count),
+        'deleted_count' => $deleted_count
+    ));
+}
+add_action('wp_ajax_multilang_clear_cache', 'multilang_ajax_clear_cache_option');
+
 // Handle form submission
 function multilang_handle_options_save() {
     if (isset($_POST['multilang_save_options']) && check_admin_referer('multilang_options_nonce')) {
@@ -39,14 +95,6 @@ function multilang_handle_options_save() {
         $options['excerpt_line_limit_enabled'] = isset($_POST['multilang_excerpt_line_limit_enabled']) ? 1 : 0;
         $options['excerpt_line_limit'] = isset($_POST['multilang_excerpt_line_limit']) ? intval($_POST['multilang_excerpt_line_limit']) : 0;
         multilang_save_options($options);
-        /*
-        add_settings_error(
-            'multilang_options',
-            'multilang_settings_updated',
-            'Settings saved successfully.',
-            'updated'
-        );
-        */
     }
 }
 add_action('admin_init', 'multilang_handle_options_save');
@@ -56,17 +104,225 @@ function multilang_render_options_tab($active_tab) {
     $options = multilang_get_options();
     $line_limit_enabled = isset($options['excerpt_line_limit_enabled']) ? $options['excerpt_line_limit_enabled'] : 0;
     $line_limit = isset($options['excerpt_line_limit']) ? $options['excerpt_line_limit'] : '';
+    $cache_enabled = isset($options['cache_enabled']) ? $options['cache_enabled'] : 1; // Enabled by default
+    $cache_debug_logging = isset($options['cache_debug_logging']) ? $options['cache_debug_logging'] : 0; // Disabled by default
+    
+    // Get cache info
+    $cache_info = multilang_get_cache_info();
     
     echo '<div id="tab-misc" class="multilang-tab-content" style="' . ($active_tab !== 'misc' ? 'display:none;' : '') . '">';
     
     // Show any notices
     settings_errors('multilang_options');
     
-    echo '<form method="post" action="" style="background:#fff;padding:2em 2em 1em 2em;border-radius:1em;box-shadow:0 2px 16px rgba(0,0,0,0.07);">';
+    echo '<form id="multilang-cache-form" method="post" action="" style="background:#fff;padding:2em 2em 1em 2em;border-radius:1em;box-shadow:0 2px 16px rgba(0,0,0,0.07);">';
     wp_nonce_field('multilang_options_nonce');
     ?>
-    <h2>Excerpt Settings</h2>
     
+    <h2>Cache</h2>
+    
+    <div id="multilang-cache-message" style="display:none;margin:10px 0;padding:10px;border-radius:4px;"></div>
+    
+    <table class="form-table">
+        <tr>
+            <th scope="row">
+                <label for="multilang_cache_enabled">Enable Page Caching</label>
+            </th>
+            <td>
+                <input 
+                    type="checkbox" 
+                    id="multilang_cache_enabled" 
+                    name="multilang_cache_enabled" 
+                    value="1"
+                    <?php checked($cache_enabled, 1); ?>
+                />
+                <p class="description">Cache translated pages/posts. Cache is automatically cleared when content is saved.</p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">
+                <label for="multilang_cache_debug_logging">Enable Debug Logging</label>
+            </th>
+            <td>
+                <input 
+                    type="checkbox" 
+                    id="multilang_cache_debug_logging" 
+                    name="multilang_cache_debug_logging" 
+                    value="1"
+                    <?php checked($cache_debug_logging, 1); ?>
+                />
+                <p class="description">Log cache hits, misses, generation, and clearing to the PHP error log (debug.log). Useful for troubleshooting.</p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">Caching Strategy</th>
+            <td>
+                <p><strong>Per-Page Caching:</strong> Each page and post has its own cache file.</p>
+                <p><strong>Auto-Invalidation:</strong> Cache is cleared automatically when:</p>
+                <ul style="margin-left: 20px; list-style: disc;">
+                    <li>A post/page is saved or updated</li>
+                    <li>A post is deleted</li>
+                    <li>Translations are updated</li>
+                    <li>Language settings change</li>
+                </ul>
+                <p class="description">No time-based expiration - cache stays fresh until content changes.</p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">Cache Statistics</th>
+            <td>
+                <p><strong>Files:</strong> <?php echo esc_html($cache_info['count']); ?></p>
+                <p><strong>Size:</strong> <?php echo esc_html($cache_info['size_formatted']); ?></p>
+                <p><strong>Location:</strong> <code><?php echo esc_html(multilang_get_cache_dir()); ?></code></p>
+            </td>
+        </tr>
+    </table>
+    
+    <div style="display: flex; gap: 10px; align-items: center;">
+        <button type="submit" class="button button-primary" id="multilang-save-cache-settings">Save Settings</button>
+        <button type="button" class="button button-secondary" id="multilang-clear-cache-btn">Clear All Cache</button>
+        <span id="multilang-cache-spinner" class="spinner" style="float:none;margin:0;"></span>
+    </div>
+    </form>
+    
+    <script>
+    jQuery(document).ready(function($) {
+        // Save cache settings via AJAX
+        $('#multilang-cache-form').on('submit', function(e) {
+            e.preventDefault();
+            
+            var $form = $(this);
+            var $message = $('#multilang-cache-message');
+            var $spinner = $('#multilang-cache-spinner');
+            var $submitBtn = $('#multilang-save-cache-settings');
+            
+            $spinner.addClass('is-active');
+            $submitBtn.prop('disabled', true);
+            $message.hide();
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'multilang_save_cache_settings',
+                    nonce: '<?php echo wp_create_nonce('multilang_cache_settings_nonce'); ?>',
+                    cache_enabled: $('#multilang_cache_enabled').is(':checked') ? 1 : 0,
+                    cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0
+                },
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+                    $submitBtn.prop('disabled', false);
+                    
+                    if (response.success) {
+                        $message.removeClass('error').addClass('success')
+                            .css({
+                                'background-color': '#d4edda',
+                                'border': '1px solid #c3e6cb',
+                                'color': '#155724'
+                            })
+                            .text('Settings saved successfully.')
+                            .slideDown();
+                    } else {
+                        $message.removeClass('success').addClass('error')
+                            .css({
+                                'background-color': '#f8d7da',
+                                'border': '1px solid #f5c6cb',
+                                'color': '#721c24'
+                            })
+                            .text(response.data.message || 'Failed to save settings.')
+                            .slideDown();
+                    }
+                    
+                    setTimeout(function() {
+                        $message.slideUp();
+                    }, 3000);
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $submitBtn.prop('disabled', false);
+                    $message.removeClass('success').addClass('error')
+                        .css({
+                            'background-color': '#f8d7da',
+                            'border': '1px solid #f5c6cb',
+                            'color': '#721c24'
+                        })
+                        .text('An error occurred while saving settings.')
+                        .slideDown();
+                }
+            });
+        });
+        
+        // Clear cache via AJAX
+        $('#multilang-clear-cache-btn').on('click', function(e) {
+            e.preventDefault();
+            
+            var $btn = $(this);
+            var $message = $('#multilang-cache-message');
+            var $spinner = $('#multilang-cache-spinner');
+            
+            if (!confirm('Are you sure you want to clear all cache files?')) {
+                return;
+            }
+            
+            $spinner.addClass('is-active');
+            $btn.prop('disabled', true);
+            $message.hide();
+            
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'multilang_clear_cache',
+                    nonce: '<?php echo wp_create_nonce('multilang_cache_nonce'); ?>'
+                },
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    
+                    if (response.success) {
+                        $message.removeClass('error').addClass('success')
+                            .css({
+                                'background-color': '#d4edda',
+                                'border': '1px solid #c3e6cb',
+                                'color': '#155724'
+                            })
+                            .text(response.data.message)
+                            .slideDown();
+                        
+                        // Reload cache stats
+                        location.reload();
+                    } else {
+                        $message.removeClass('success').addClass('error')
+                            .css({
+                                'background-color': '#f8d7da',
+                                'border': '1px solid #f5c6cb',
+                                'color': '#721c24'
+                            })
+                            .text(response.data.message || 'Failed to clear cache.')
+                            .slideDown();
+                    }
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    $message.removeClass('success').addClass('error')
+                        .css({
+                            'background-color': '#f8d7da',
+                            'border': '1px solid #f5c6cb',
+                            'color': '#721c24'
+                        })
+                        .text('An error occurred while clearing cache.')
+                        .slideDown();
+                }
+            });
+        });
+    });
+    </script>
+    
+    <h2 style="margin-top:2em;">Excerpt Settings</h2>
+    
+    <form method="post" action="" style="background:#fff;padding:2em 2em 1em 2em;border-radius:1em;box-shadow:0 2px 16px rgba(0,0,0,0.07);">
+    <?php wp_nonce_field('multilang_options_nonce'); ?>
     <table class="form-table">
         <tr>
             <th scope="row">

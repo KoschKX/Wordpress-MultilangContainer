@@ -104,24 +104,8 @@ function multilang_process_text_for_translations($html, $translations, $current_
 }
 
 function multilang_get_language_data($lang) {
-    static $cache = array();
-    
-    if (isset($cache[$lang])) {
-        return $cache[$lang];
-    }
-    
-    $lang_file = get_language_file_path($lang);
-    if (file_exists($lang_file)) {
-        $lang_content = file_get_contents($lang_file);
-        $data = json_decode($lang_content, true) ?: array();
-        
-        $cache[$lang] = $data;
-        
-        return $data;
-    }
-    
-    $cache[$lang] = array();
-    return array();
+    // Use cached version
+    return multilang_get_cached_language_data($lang);
 }
 
 function multilang_find_translation_in_data($text, $data) {
@@ -236,11 +220,10 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
     $replacements_made = 0;
     
     if ($structure_data === null) {
-       $structure_file =  get_structure_file_path();
-        if (file_exists($structure_file)) {
-            $structure_content = file_get_contents($structure_file);
-            $structure_data = json_decode($structure_content, true);
-        } else {
+        // Use cached structure data
+        $structure_data = multilang_get_cached_structure_data();
+        
+        if (empty($structure_data)) {
             $structure_data = false;
         }
     }
@@ -533,20 +516,16 @@ function multilang_start_page_buffer() {
         return;
     }
     
-    $structure_file = get_structure_file_path();
+    // Use cached structure data
+    $structure_data = multilang_get_cached_structure_data();
     $has_server_sections = false;
     
-    if (file_exists($structure_file)) {
-        $structure_content = file_get_contents($structure_file);
-        $structure_data = json_decode($structure_content, true);
-        
-        if ($structure_data && is_array($structure_data)) {
-            foreach ($structure_data as $section => $config) {
-                $section_method = isset($config['_method']) ? $config['_method'] : 'server';
-                if ($section_method === 'server') {
-                    $has_server_sections = true;
-                    break;
-                }
+    if ($structure_data && is_array($structure_data)) {
+        foreach ($structure_data as $section => $config) {
+            $section_method = isset($config['_method']) ? $config['_method'] : 'server';
+            if ($section_method === 'server') {
+                $has_server_sections = true;
+                break;
             }
         }
     }
@@ -577,8 +556,22 @@ function multilang_process_entire_page($html) {
         //return $html;
     }
     
+    // Get current language for cache key
+    $current_lang = multilang_get_current_language();
+    
+    // Try to get cached version
+    $cached_html = multilang_get_cached_page_content($current_lang);
+    
+    if ($cached_html !== false) {
+        return $cached_html;
+    }
+    
+    // Process the HTML
     $processed_html = multilang_server_side_translate($html);
-    $processed_html = str_replace('</head>', '<!-- Server-side translation processed --></head>', $processed_html);
+    $processed_html = str_replace('</head>', '<!-- Server-side translation processed and cached --></head>', $processed_html);
+    
+    // Cache the result
+    multilang_set_cached_page_content($current_lang, $processed_html);
     
     return $processed_html;
 }
@@ -685,23 +678,19 @@ function multilang_get_all_container_selectors() {
     if ($all_selectors === null) {
         $all_selectors = array();
         
-        // Get selectors from structure.json
-        $structure_file = get_structure_file_path();
-        if (file_exists($structure_file)) {
-            $structure_content = file_get_contents($structure_file);
-            $structure_data = json_decode($structure_content, true);
-            
-            if ($structure_data && is_array($structure_data)) {
-                foreach ($structure_data as $category => $config) {
-                    if (is_array($config) && isset($config['_selectors'])) {
-                        $selectors = $config['_selectors'];
-                        if (is_array($selectors)) {
-                            $all_selectors = array_merge($all_selectors, $selectors);
-                        }
+        // Use cached structure data
+        $structure_data = multilang_get_cached_structure_data();
+        
+        if ($structure_data && is_array($structure_data)) {
+            foreach ($structure_data as $category => $config) {
+                if (is_array($config) && isset($config['_selectors'])) {
+                    $selectors = $config['_selectors'];
+                    if (is_array($selectors)) {
+                        $all_selectors = array_merge($all_selectors, $selectors);
                     }
                 }
-                $all_selectors = array_unique($all_selectors);
             }
+            $all_selectors = array_unique($all_selectors);
         }
     }
     

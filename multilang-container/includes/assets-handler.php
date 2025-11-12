@@ -12,6 +12,7 @@ if (!defined('ABSPATH')) {
 
 /**
  * Pure CSS solution - hide all languages by default, show only the one with matching body class
+ * Now with caching support!
  */
 function multilang_inject_immediate_css() {
     // Don't load during backend operations
@@ -19,129 +20,18 @@ function multilang_inject_immediate_css() {
         return;
     }
     
-    $available_langs = get_multilang_available_languages();
-    $default_lang = get_multilang_default_language();
-    $current_lang = $default_lang;
-        
-        // Check for cookie to determine initial language
-        if ( isset($_COOKIE['lang']) ) {
-            $cookie_lang = sanitize_text_field($_COOKIE['lang']);
-            if ( in_array($cookie_lang, $available_langs) ) {
-                $current_lang = $cookie_lang;
-            }
-        }
-        
-        // Build CSS string
-        $css = '
-        /* Hide all language variants by default */
-        .translate .lang-en,
-        .translate .lang-de, 
-        .translate .lang-fr,
-        .translate .lang-es,
-        .translate .lang-it,
-        .translate .lang-pt,
-        .translate .lang-nl,
-        .translate .lang-pl,
-        .translate .lang-ru,
-        .translate .lang-zh,
-        .translate .lang-ja,
-        .translate .lang-ko,
-        .wp-block-multilang-container .lang-en,
-        .wp-block-multilang-container .lang-de,
-        .wp-block-multilang-container .lang-fr,
-        .wp-block-multilang-container .lang-es,
-        .wp-block-multilang-container .lang-it,
-        .wp-block-multilang-container .lang-pt,
-        .wp-block-multilang-container .lang-nl,
-        .wp-block-multilang-container .lang-pl,
-        .wp-block-multilang-container .lang-ru,
-        .wp-block-multilang-container .lang-zh,
-        .wp-block-multilang-container .lang-ja,
-        .wp-block-multilang-container .lang-ko { 
-            display: none !important; 
-        }
-        
-        /* Show current language using html[data-lang] selector to match main CSS */
-        html[data-lang="' . esc_attr($current_lang) . '"] .translate .lang-' . esc_attr($current_lang) . ',
-        html[data-lang="' . esc_attr($current_lang) . '"] .wp-block-multilang-container .lang-' . esc_attr($current_lang) . ' { 
-            display: block !important; 
-        }';
-        
-        // Build JavaScript
-        $js = '
-        // Immediately check for language preference and update CSS
-        (function() {
-            // Helper function to get cookie value
-            function getCookie(name) {
-                var value = "; " + document.cookie;
-                var parts = value.split("; " + name + "=");
-                if (parts.length == 2) return parts.pop().split(";").shift();
-                return null;
-            }
-            
-            // Get language from cookie first, then localStorage, then default
-            var cookieLang = getCookie("lang");
-            var storageLang = localStorage.getItem("preferredLanguage");
-            var savedLang = cookieLang || storageLang || "' . esc_js($default_lang) . '";
-            var availableLangs = ' . json_encode($available_langs) . ';
-            
-            // Validate saved language
-            if (availableLangs.indexOf(savedLang) === -1) {
-                savedLang = "' . esc_js($default_lang) . '";
-            }
-            
-            // Save to both localStorage and cookie
-            localStorage.setItem("preferredLanguage", savedLang);
-            document.cookie = "lang=" + savedLang + "; path=/; max-age=31536000; SameSite=Lax";
-            
-            // Update CSS rules immediately with html[data-lang] selector to match main CSS
-            var style = document.getElementById("multilang-immediate-css");
-            if (style) {
-                var newCSS = "/* Hide all languages */ " +
-                    ".translate .lang-en, .translate .lang-de, .translate .lang-fr, .translate .lang-es, .translate .lang-it, .translate .lang-pt, .translate .lang-nl, .translate .lang-pl, .translate .lang-ru, .translate .lang-zh, .translate .lang-ja, .translate .lang-ko, " +
-                    ".wp-block-multilang-container .lang-en, .wp-block-multilang-container .lang-de, .wp-block-multilang-container .lang-fr, .wp-block-multilang-container .lang-es, .wp-block-multilang-container .lang-it, .wp-block-multilang-container .lang-pt, .wp-block-multilang-container .lang-nl, .wp-block-multilang-container .lang-pl, .wp-block-multilang-container .lang-ru, .wp-block-multilang-container .lang-zh, .wp-block-multilang-container .lang-ja, .wp-block-multilang-container .lang-ko " +
-                    "{ display: none !important; } " +
-                    "/* Show selected language using html[data-lang] selector */ " +
-                    "html[data-lang=\"" + savedLang + "\"] .translate .lang-" + savedLang + ", html[data-lang=\"" + savedLang + "\"] .wp-block-multilang-container .lang-" + savedLang + " { display: block !important; }";
-                style.textContent = newCSS;
-            }
-            
-            // Set attributes
-            var html = document.documentElement;
-            
-            if (html) {
-                html.setAttribute("lang", savedLang);
-                html.setAttribute("data-lang", savedLang);
-            }
-            
-            // Wait for body to be available
-            function setBodyAttrs() {
-                var body = document.body;
-                if (body) {
-                    body.setAttribute("lang", savedLang);
-                    body.setAttribute("data-lang", savedLang);
-                    
-                    // Remove all existing lang- classes
-                    body.className = body.className.replace(/\\blang-[a-z]{2}\\b/g, "");
-                    body.className += " lang-" + savedLang;
-                } else {
-                    setTimeout(setBodyAttrs, 1);
-                }
-            }
-            setBodyAttrs();
-            
-            // Store current language globally for other scripts
-            window.currentLanguage = savedLang;
-        })();';
-        
-        // Use wp_add_inline_style and wp_add_inline_script
-        wp_register_style('multilang-immediate-css', false);
-        wp_enqueue_style('multilang-immediate-css');
-        wp_add_inline_style('multilang-immediate-css', $css);
-        
-        wp_register_script('multilang-immediate-js', false);
-        wp_enqueue_script('multilang-immediate-js');
-        wp_add_inline_script('multilang-immediate-js', $js);
+    // Get cached CSS and JS or generate them
+    $css = multilang_get_cached_inline_css();
+    $js = multilang_get_cached_inline_js();
+    
+    // Use wp_add_inline_style and wp_add_inline_script
+    wp_register_style('multilang-immediate-css', false);
+    wp_enqueue_style('multilang-immediate-css');
+    wp_add_inline_style('multilang-immediate-css', $css);
+    
+    wp_register_script('multilang-immediate-js', false);
+    wp_enqueue_script('multilang-immediate-js');
+    wp_add_inline_script('multilang-immediate-js', $js);
 }
 add_action( 'wp_enqueue_scripts', 'multilang_inject_immediate_css', 0 );
 
@@ -209,21 +99,16 @@ function multilang_container_enqueue_scripts() {
 		true
 	);
 	
-	// Check if any section uses JavaScript translation by reading structure.json
-	$structure_file = get_structure_file_path();
+	// Check if any section uses JavaScript translation by reading structure.json (with caching)
+	$structure_data = multilang_get_cached_structure_data();
 	$has_javascript_sections = false;
 	
-	if (file_exists($structure_file)) {
-		$structure_content = file_get_contents($structure_file);
-		$structure_data = json_decode($structure_content, true);
-		
-		if ($structure_data && is_array($structure_data)) {
-			foreach ($structure_data as $section => $config) {
-				$section_method = isset($config['_method']) ? $config['_method'] : 'server';
-				if ($section_method === 'javascript') {
-					$has_javascript_sections = true;
-					break;
-				}
+	if ($structure_data && is_array($structure_data)) {
+		foreach ($structure_data as $section => $config) {
+			$section_method = isset($config['_method']) ? $config['_method'] : 'server';
+			if ($section_method === 'javascript') {
+				$has_javascript_sections = true;
+				break;
 			}
 		}
 	}
@@ -284,13 +169,8 @@ function multilang_container_enqueue_scripts() {
 		}
 	}
 	
-	// Load structure data for JavaScript
-	$structure_file = get_structure_file_path();
-	$structure_data = array();
-	if (file_exists($structure_file)) {
-		$structure_content = file_get_contents($structure_file);
-		$structure_data = json_decode($structure_content, true) ?: array();
-	}
+	// Load structure data for JavaScript (with caching)
+	$structure_data = multilang_get_cached_structure_data();
 	
 	// Prepare localized data
 	$localized_data = array(
