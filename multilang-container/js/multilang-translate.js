@@ -182,7 +182,7 @@
         } else {
             runTranslations();
         }
-        runTranslations();
+       //runTranslations();
 
         document.addEventListener('multilangBarReady', function(e) {
             setupLanguageSwitching();
@@ -354,6 +354,11 @@
             document.body.getAttribute('lang') ||
             'en';
         updateLanguageDisplay(currentLang);
+        
+        // Unhide content after translations are complete
+        if (typeof window.multilangUnhideContent === 'function') {
+            window.multilangUnhideContent();
+        }
     }
 
     function convertAllLangTags() {

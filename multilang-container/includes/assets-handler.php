@@ -121,6 +121,7 @@ function multilang_container_enqueue_scripts() {
 	// Conditionally enqueue translation script if any section uses JavaScript
 	if ($has_javascript_sections) {
 		// Add inline CSS to hide JS-translated sections until processed
+		/*
 		$hide_css = '';
 		if ($structure_data && is_array($structure_data)) {
 			$selectors = array();
@@ -136,6 +137,7 @@ function multilang_container_enqueue_scripts() {
 				wp_add_inline_style('multilang-container-css', $hide_css);
 			}
 		}
+		*/
 		
 		wp_enqueue_script(
 			'multilang-translate-js',
@@ -146,6 +148,7 @@ function multilang_container_enqueue_scripts() {
 		);
 		
 		// Add inline script to run translation immediately when script loads and unhide content
+		/*
 		$inline_js = '
 		if (typeof window.multilangRunTranslationsNow === "function") { 
 			window.multilangRunTranslationsNow(); 
@@ -153,14 +156,25 @@ function multilang_container_enqueue_scripts() {
 		if (!empty($selectors)) {
 			$escaped_selectors = array_map('esc_js', $selectors);
 			$inline_js .= '
-		// Unhide content after translation
-		setTimeout(function() {
+		// Create global unhide function
+		window.multilangUnhideContent = function() {
 			var selectors = ' . json_encode($escaped_selectors) . ';
 			selectors.forEach(function(sel) {
 				var els = document.querySelectorAll(sel);
-				els.forEach(function(el) { el.style.visibility = "visible"; });
+				els.forEach(function(el) { 
+					el.style.visibility = "visible";
+					el.style.setProperty("visibility", "visible", "important");
+				});
 			});
-		}, 100);';
+		};
+		// Unhide immediately after a short delay
+		// setTimeout(window.multilangUnhideContent, 0);
+		// Unhide on DOMContentLoaded
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", window.multilangUnhideContent);
+		}
+		// Final unhide on window load
+		window.addEventListener("load", window.multilangUnhideContent);';
 		}
 		
 		wp_add_inline_script(
@@ -168,6 +182,7 @@ function multilang_container_enqueue_scripts() {
 			$inline_js,
 			'after'
 		);
+		*/
 	}
 	
 	// Language switcher script is now enqueued in language-switcher.php
