@@ -52,11 +52,13 @@ function multilang_ajax_save_cache_settings() {
     $options = multilang_get_options();
     $options['cache_enabled'] = isset($_POST['cache_enabled']) ? intval($_POST['cache_enabled']) : 0;
     $options['cache_debug_logging'] = isset($_POST['cache_debug_logging']) ? intval($_POST['cache_debug_logging']) : 0;
+    $options['cache_ajax_requests'] = isset($_POST['cache_ajax_requests']) ? intval($_POST['cache_ajax_requests']) : 0;
     multilang_save_options($options);
     
     // Also save to WordPress options for faster access
     update_option('multilang_container_cache_enabled', $options['cache_enabled']);
     update_option('multilang_container_cache_debug_logging', $options['cache_debug_logging']);
+    update_option('multilang_container_cache_ajax_requests', $options['cache_ajax_requests']);
     
     wp_send_json_success(array('message' => 'Settings saved successfully.'));
 }
@@ -106,6 +108,7 @@ function multilang_render_options_tab($active_tab) {
     $line_limit = isset($options['excerpt_line_limit']) ? $options['excerpt_line_limit'] : '';
     $cache_enabled = isset($options['cache_enabled']) ? $options['cache_enabled'] : 1; // Enabled by default
     $cache_debug_logging = isset($options['cache_debug_logging']) ? $options['cache_debug_logging'] : 0; // Disabled by default
+    $cache_ajax_requests = isset($options['cache_ajax_requests']) ? $options['cache_ajax_requests'] : 0; // Disabled by default
     
     // Get cache info
     $cache_info = multilang_get_cache_info();
@@ -137,6 +140,21 @@ function multilang_render_options_tab($active_tab) {
                     <?php checked($cache_enabled, 1); ?>
                 />
                 <p class="description">Cache translated pages/posts. Cache is automatically cleared when content is saved.</p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">
+                <label for="multilang_cache_ajax_requests">Cache AJAX Requests</label>
+            </th>
+            <td>
+                <input 
+                    type="checkbox" 
+                    id="multilang_cache_ajax_requests" 
+                    name="multilang_cache_ajax_requests" 
+                    value="1"
+                    <?php checked($cache_ajax_requests, 1); ?>
+                />
+                <p class="description">Cache AJAX requests (like "load more" posts). <strong>Disable this if you experience issues with dynamic content loading.</strong></p>
             </td>
         </tr>
         <tr>
@@ -207,6 +225,7 @@ function multilang_render_options_tab($active_tab) {
                     action: 'multilang_save_cache_settings',
                     nonce: '<?php echo wp_create_nonce('multilang_cache_settings_nonce'); ?>',
                     cache_enabled: $('#multilang_cache_enabled').is(':checked') ? 1 : 0,
+                    cache_ajax_requests: $('#multilang_cache_ajax_requests').is(':checked') ? 1 : 0,
                     cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0
                 },
                 success: function(response) {

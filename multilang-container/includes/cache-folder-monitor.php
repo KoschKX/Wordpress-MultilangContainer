@@ -85,8 +85,16 @@ add_action('init', 'multilang_init_cache_folder_monitor', 999);
  */
 function multilang_hook_wpfc_clear() {
     add_action('wpfc_clear_all_cache', 'multilang_clear_all_cache');
+    
+    // Exclude AJAX requests from being cached by WPFC - priority 1 to run early
+    add_filter('wpfc_is_cacheable', function($cacheable) {
+        if (wp_doing_ajax()) {
+            return false;
+        }
+        return $cacheable;
+    }, 1, 1);
 }
-add_action('plugins_loaded', 'multilang_hook_wpfc_clear');
+add_action('plugins_loaded', 'multilang_hook_wpfc_clear', 1);
 
 /**
  * Init cache folder mtimes on activation

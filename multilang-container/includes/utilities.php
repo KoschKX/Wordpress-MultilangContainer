@@ -2,17 +2,13 @@
 /**
  * Multilang Container - Utilities
  * 
- * Handles helper functions, language utilities, and common functions
+ * Helper functions for language management and common operations
  */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-	/**
-	 * Check if current request is a backend operation
-	 */
 	function multilang_is_backend_operation() {
 		if ( wp_doing_ajax() || wp_doing_cron() || (defined('DOING_AUTOSAVE') && DOING_AUTOSAVE) ) {
 			return true;
@@ -67,9 +63,6 @@ if (!defined('ABSPATH')) {
 		return false;
 	}
 
-	/**
-	 * Enhance translations with fallbacks
-	 */
 	function enhance_translations_with_fallbacks($translations) {
 		if (!is_array($translations)) {
 			return array();
@@ -98,25 +91,16 @@ if (!defined('ABSPATH')) {
 		return $enhanced;
 	}
 
-	/**
-	 * Get available languages from settings
-	 */
 	function get_multilang_available_languages() {
 		return get_option('multilang_container_languages', array('en'));
 	}
 
-	/**
-	 * Get default language from settings
-	 */
 	function get_multilang_default_language() {
 		$default = get_option('multilang_container_default_language', 'en');
 		$available = get_multilang_available_languages();
 		return in_array($default, $available) ? $default : (isset($available[0]) ? $available[0] : 'en');
 	}
 
-	/**
-	 * Get current language
-	 */
 	function multilang_get_current_language() {
 		$default_lang = get_multilang_default_language();
 		$current_lang = $default_lang;
@@ -140,9 +124,6 @@ if (!defined('ABSPATH')) {
 		return $current_lang;
 	}
 
-	/**
-	 * Fix flag filename for special cases
-	 */
 	function multilang_fix_flag_filename($lang_code, $flag) {
 		$flag_actual = $flag;
 		if ($lang_code === 'en') $flag_actual = 'img/flags/gb.svg';
@@ -160,14 +141,13 @@ if (!defined('ABSPATH')) {
 	}
 
 	function get_selected_languages_flags($langs) {
-		// Load language flags from JSON
 		$json_path = plugin_dir_path(dirname(__FILE__)) . 'data/languages-flags.json';
 		$lang_flags = array();
 		if (file_exists($json_path)) {
 			$json = file_get_contents($json_path);
 			$lang_flags = json_decode($json, true);
 		}
-		// Filter to only selected languages
+		
 		$selected_lang_flags = array();
 		foreach ($lang_flags as $lang) {
 			if (in_array($lang['code'], $langs)) {
@@ -177,25 +157,16 @@ if (!defined('ABSPATH')) {
 		return $selected_lang_flags;
 	}
 
-
-	/**
-	 * Debug admin notice
-	 */
 	function multilang_container_admin_notice() {
 		if ( function_exists('register_block_type') ) {
-			// echo '<div class="notice notice-success is-dismissible"><p>Multilang Container is registered and active.</p></div>';
+			
 		} else {
 			echo '<div class="notice notice-error"><p>Multilang Container registration failed. Check for errors in block.json or PHP.</p></div>';
 		}
 	}
 	add_action('admin_notices', 'multilang_container_admin_notice');
 
-
-	/**
-	 * Helper functions for translation management
-	 */
 	function get_translations_data_dir() {
-		//return plugin_dir_path(dirname(__FILE__)) . 'data/';
 		$upload_dir = wp_upload_dir();
 		$multilang_dir = trailingslashit($upload_dir['basedir']) . 'multilang/';
 		if (!is_dir($multilang_dir)) {
@@ -223,9 +194,6 @@ if (!defined('ABSPATH')) {
 		$upload_dir = wp_upload_dir();
 		return trailingslashit($upload_dir['baseurl']) . 'multilang/';
 	}
-
-
-/* OBFUSCATION */
 
 	function obfuscate($str) {
 		if (!is_string($str)) return $str;

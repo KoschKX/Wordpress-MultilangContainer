@@ -2,58 +2,58 @@
 /**
  * Multilang Container - Cache Handler
  * 
- * Caching for PHP-generated content
+ * File-based caching for translated content
  */
 
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Check if cache debug logging is enabled
- */
 function multilang_is_cache_debug_logging_enabled() {
     $options = get_option('multilang_container_cache_debug_logging');
     
-    // Check new location first
     if ($options !== false) {
         return (bool) $options;
     }
     
-    // Check old location in JSON file
     $json_options = multilang_get_options();
     if (isset($json_options['cache_debug_logging'])) {
         return (bool) $json_options['cache_debug_logging'];
     }
     
-    // Default: disabled
     return false;
 }
 
-/**
- * Check if caching is enabled
- */
-function multilang_is_cache_enabled() {
-    $options = get_option('multilang_container_cache_enabled');
+function multilang_is_ajax_cache_enabled() {
+    $options = get_option('multilang_container_cache_ajax_requests');
     
-    // Check new location first
     if ($options !== false) {
         return (bool) $options;
     }
     
-    // Check old location in JSON file
+    $json_options = multilang_get_options();
+    if (isset($json_options['cache_ajax_requests'])) {
+        return (bool) $json_options['cache_ajax_requests'];
+    }
+    
+    return false;
+}
+
+function multilang_is_cache_enabled() {
+    $options = get_option('multilang_container_cache_enabled');
+    
+    if ($options !== false) {
+        return (bool) $options;
+    }
+    
     $json_options = multilang_get_options();
     if (isset($json_options['cache_enabled'])) {
         return (bool) $json_options['cache_enabled'];
     }
     
-    // Default: enabled
     return true;
 }
 
-/**
- * Get cache directory path
- */
 function multilang_get_cache_dir() {
     $upload_dir = wp_upload_dir();
     $cache_dir = trailingslashit($upload_dir['basedir']) . 'multilang/cache/';
@@ -61,13 +61,11 @@ function multilang_get_cache_dir() {
     if (!is_dir($cache_dir)) {
         wp_mkdir_p($cache_dir);
         
-        // Add .htaccess to protect cache directory
         $htaccess_file = $cache_dir . '.htaccess';
         if (!file_exists($htaccess_file)) {
             file_put_contents($htaccess_file, "# Protect cache directory\n<Files \"*.cache\">\n    Require all denied\n</Files>");
         }
         
-        // Add index.php to prevent directory listing
         $index_file = $cache_dir . 'index.php';
         if (!file_exists($index_file)) {
             file_put_contents($index_file, "<?php\n// Silence is golden.\n");
@@ -77,19 +75,12 @@ function multilang_get_cache_dir() {
     return $cache_dir;
 }
 
-/**
- * Get cache file path for a specific key
- */
 function multilang_get_cache_file_path($cache_key) {
     $cache_dir = multilang_get_cache_dir();
     $safe_key = sanitize_file_name($cache_key);
     return $cache_dir . $safe_key . '.cache';
 }
 
-/**
- * Get cached data
- * $expiration = 0 means no time-based expiration
- */
 function multilang_get_cache($cache_key, $expiration = 3600) {
     $cache_file = multilang_get_cache_file_path($cache_key);
     
@@ -97,17 +88,14 @@ function multilang_get_cache($cache_key, $expiration = 3600) {
         return false;
     }
     
-    // Skip time check if expiration is 0
     if ($expiration > 0) {
         $file_time = filemtime($cache_file);
         if ((time() - $file_time) > $expiration) {
-            // Cache expired, delete it
             @unlink($cache_file);
             return false;
         }
     }
     
-    // Read and unserialize cached data
     $cached_content = file_get_contents($cache_file);
     if ($cached_content === false) {
         return false;
@@ -117,24 +105,16 @@ function multilang_get_cache($cache_key, $expiration = 3600) {
     return $data !== false ? $data : false;
 }
 
-/**
- * Set cached data
- */
 function multilang_set_cache($cache_key, $data) {
     $cache_file = multilang_get_cache_file_path($cache_key);
     
-    // Serialize data
     $serialized = serialize($data);
     
-    // Write to cache file
     $result = file_put_contents($cache_file, $serialized, LOCK_EX);
     
     return $result !== false;
 }
 
-/**
- * Delete specific cache entry
- */
 function multilang_delete_cache($cache_key) {
     $cache_file = multilang_get_cache_file_path($cache_key);
     
@@ -145,9 +125,6 @@ function multilang_delete_cache($cache_key) {
     return true;
 }
 
-/**
- * Clear all cache files
- */
 function multilang_clear_all_cache() {
     $cache_dir = multilang_get_cache_dir();
     $deleted_count = 0;
@@ -173,15 +150,11 @@ function multilang_clear_all_cache() {
         }
     }
     
-    // Trigger action for other systems to hook into
     do_action('multilang_cache_cleared', $deleted_count);
     
     return $deleted_count;
 }
 
-/**
- * Get cache size info
- */
 function multilang_get_cache_info() {
     $cache_dir = multilang_get_cache_dir();
     $info = array(
@@ -206,7 +179,6 @@ function multilang_get_cache_info() {
         }
     }
     
-    // Format size
     $units = array('B', 'KB', 'MB', 'GB');
     $size = $info['size'];
     $unit_index = 0;
@@ -221,9 +193,6 @@ function multilang_get_cache_info() {
     return $info;
 }
 
-/**
- * Get cached inline CSS
- */
 function multilang_get_cached_inline_css() {
     $cache_key = 'inline_css_' . multilang_get_current_language();
     $cached = multilang_get_cache($cache_key, 0);
@@ -421,6 +390,11 @@ function multilang_get_cached_language_data($lang) {
  */
 function multilang_get_page_cache_key() {
     global $post;
+    
+    // Don't cache AJAX requests unless explicitly enabled
+    if (wp_doing_ajax() && !multilang_is_ajax_cache_enabled()) {
+        return false;
+    }
     
     if (is_singular() && $post && !empty($post->ID)) {
         $post_modified = get_post_modified_time('U', false, $post->ID);

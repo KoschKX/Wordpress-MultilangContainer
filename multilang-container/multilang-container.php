@@ -6,12 +6,10 @@ Version: 1.0
 Author: Gary Angelone Jr.
 */
 
-// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Include all modular components
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
@@ -30,6 +28,65 @@ require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-seo.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
+
+// Don't cache AJAX unless the user opts in
+// Run at priority 999 to ensure it runs AFTER WP Fastest Cache (which runs at priority 10)
+add_action('init', function() {
+    if (wp_doing_ajax()) {
+        if (!function_exists('multilang_is_ajax_cache_enabled')) {
+            require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
+        }
+        
+        if (!multilang_is_ajax_cache_enabled()) {
+            if (!defined('DONOTCACHEPAGE')) {
+                define('DONOTCACHEPAGE', true);
+            }
+            if (!defined('DONOTCACHEDB')) {
+                define('DONOTCACHEDB', true);
+            }
+            if (!defined('DONOTMINIFY')) {
+                define('DONOTMINIFY', true);
+            }
+            if (!defined('DONOTCDN')) {
+                define('DONOTCDN', true);
+            }
+            if (!defined('DONOTCACHEOBJECT')) {
+                define('DONOTCACHEOBJECT', true);
+            }
+            
+            add_action('send_headers', function() {
+                if (wp_doing_ajax()) {
+                    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+                    header('Cache-Control: post-check=0, pre-check=0', false);
+                    header('Pragma: no-cache');
+                    header('Expires: Wed, 11 Jan 1984 05:00:00 GMT');
+                }
+            }, 999);
+            
+            // Fix for "load more" showing duplicate posts
+            add_action('wp_ajax_get_fusion_blog', function() {
+                nocache_headers();
+            }, 0);
+            add_action('wp_ajax_nopriv_get_fusion_blog', function() {
+                nocache_headers();
+            }, 0);
+        }
+    }
+}, 999);
+
+// Exclude AJAX from WP Fastest Cache - run early to catch it before WPFC processes
+add_filter('wpfc_exclude_current_page', function($exclude) {
+    if (wp_doing_ajax()) {
+        return true;
+    }
+    return $exclude;
+}, 1);
+
+// Tell WP Fastest Cache to exclude specific AJAX actions
+add_filter('wpfc_toolbar_exclude_ajax', function($actions) {
+    $actions[] = 'get_fusion_blog';
+    return $actions;
+}, 1, 1);
 
 require_once plugin_dir_path(__FILE__) . 'demo-usage.php';
 
@@ -55,9 +112,6 @@ add_action('wp_ajax_multilang_save_languages_json', function() {
     wp_send_json_success(['message' => 'Saved.', 'file' => $file]);
 });
 
-/**
- * Enqueue admin scripts for multilang container settings page
- */
 function multilang_container_admin_scripts($hook) {
 
     wp_enqueue_script(
