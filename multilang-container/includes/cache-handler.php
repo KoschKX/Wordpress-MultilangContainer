@@ -1,4 +1,3 @@
-
 <?php
 // File-based caching for translated content
 
