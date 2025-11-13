@@ -1,3 +1,4 @@
+
 <?php
 // File-based caching for translated content
 
@@ -6,84 +7,76 @@ if (!defined('ABSPATH')) {
 }
 
 function multilang_is_cache_debug_logging_enabled() {
-    $options = get_option('multilang_container_cache_debug_logging');
-    
-    if ($options !== false) {
-        return (bool) $options;
-    }
-    
-    $json_options = multilang_get_options();
+    $json_options = multilang_get_cache_options();
     if (isset($json_options['cache_debug_logging'])) {
         return (bool) $json_options['cache_debug_logging'];
     }
-    
     return false;
 }
 
 function multilang_is_ajax_cache_enabled() {
-    $options = get_option('multilang_container_cache_ajax_requests');
-    
-    if ($options !== false) {
-        return (bool) $options;
-    }
-    
-    $json_options = multilang_get_options();
+    $json_options = multilang_get_cache_options();
     if (isset($json_options['cache_ajax_requests'])) {
         return (bool) $json_options['cache_ajax_requests'];
     }
-    
     return false;
 }
 
 function multilang_is_page_excluded_from_cache() {
-    $options = get_option('multilang_container_cache_exclude_pages');
-    
-    if ($options === false) {
-        $json_options = multilang_get_options();
-        $options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
-    }
-    
+    $json_options = multilang_get_cache_options();
+    $options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
     if (empty($options)) {
         return false;
     }
-    
     // Get current page path
     $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-    
     // Parse comma-separated list
     $excluded_pages = array_map('trim', explode(',', $options));
-    
     foreach ($excluded_pages as $excluded) {
         if (empty($excluded)) {
             continue;
         }
-        
         // Remove leading/trailing slashes for comparison
         $excluded = trim($excluded, '/');
         $current = trim($current_path, '/');
-        
         // Check if current path matches or starts with excluded path
         if ($current === $excluded || strpos($current, $excluded) === 0) {
             return true;
         }
     }
-    
     return false;
 }
 
 function multilang_is_cache_enabled() {
-    $options = get_option('multilang_container_cache_enabled');
-    
-    if ($options !== false) {
-        return (bool) $options;
-    }
-    
-    $json_options = multilang_get_options();
+    $json_options = multilang_get_cache_options();
     if (isset($json_options['cache_enabled'])) {
         return (bool) $json_options['cache_enabled'];
     }
-    
     return true;
+}
+/**
+ * Get cache options from JSON file
+ */
+function multilang_get_cache_options() {
+    $upload_dir = wp_upload_dir();
+    $options_file = trailingslashit($upload_dir['basedir']) . 'multilang/cache-options.json';
+    if (file_exists($options_file)) {
+        $content = file_get_contents($options_file);
+        $options = json_decode($content, true);
+        if (is_array($options)) {
+            return $options;
+        }
+    }
+    return array();
+}
+
+/**
+ * Save cache options to JSON file
+ */
+function multilang_save_cache_options($options) {
+    $upload_dir = wp_upload_dir();
+    $options_file = trailingslashit($upload_dir['basedir']) . 'multilang/cache-options.json';
+    file_put_contents($options_file, json_encode($options, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 }
 
 function multilang_get_cache_dir() {
@@ -839,3 +832,21 @@ function multilang_ajax_get_cache_info() {
     wp_send_json_success($info);
 }
 add_action('wp_ajax_multilang_get_cache_info', 'multilang_ajax_get_cache_info');
+
+
+/**
+ * Get excerpt cache settings from JSON file
+ */
+function multilang_get_cache_excerpt_settings() {
+    $options = multilang_get_cache_options();
+    return isset($options['excerpt_settings']) ? $options['excerpt_settings'] : array();
+}
+
+/**
+ * Save excerpt cache settings to JSON file
+ */
+function multilang_save_cache_excerpt_settings($excerpt_settings) {
+    $options = multilang_get_cache_options();
+    $options['excerpt_settings'] = $excerpt_settings;
+    multilang_save_cache_options($options);
+}
