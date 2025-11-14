@@ -55,9 +55,10 @@ add_filter('the_content', function($content) {
         return $content;
     }
     
-    $default_lang = get_multilang_default_language();
-    
-    if (preg_match('/class="[^"]*lang-' . preg_quote($default_lang) . '[^"]*"[^>]*>(.*?)<\/div>/s', $content, $default_match)) {
+        $default_lang = get_multilang_default_language();
+
+        // Only apply fallback for blocks inside .multilang-wrapper
+        if (preg_match('/<div[^>]*class="[^"]*multilang-wrapper[^"]*lang-' . preg_quote($default_lang) . '[^"]*"[^>]*>(.*?)<\/div>/s', $content, $default_match)) {
         $default_inner = $default_match[1];
         
         if (strpos($default_inner, 'class="translate') === false) {

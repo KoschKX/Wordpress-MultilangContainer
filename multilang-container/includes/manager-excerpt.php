@@ -26,28 +26,32 @@ function multilang_get_formatted_excerpt($post_id = null) {
     }
     
     $formatted_excerpt = '<p class="multilang-wrapper">';
-    
-    foreach ($excerpts as $lang => $excerpt) {
-        if (!empty($excerpt)) {
-            $is_current = ($lang === $current_lang);
-            $data_attr = '';
-            
-            if (!$is_current) {
-                $data_attr = ' data-translation="' . esc_attr($excerpt) . '"';
-            }
-            
-            $formatted_excerpt .= '<span class="translate lang-' . esc_attr($lang) . '" data-lang="' . esc_attr($lang) . '"' . $data_attr . '>';
-            
-            if ($is_current) {
-                $formatted_excerpt .= $excerpt;
-            }
-            
-            $formatted_excerpt .= '</span>';
-        }
+    $all_langs = array();
+    // Get all possible languages (from option or from excerpts array keys)
+    if (function_exists('get_option')) {
+        $all_langs = get_option('multilang_container_languages', array_keys($excerpts));
     }
-    
+    if (empty($all_langs)) {
+        $all_langs = array_keys($excerpts);
+    }
+    $default_excerpt = isset($excerpts[$default_lang]) ? $excerpts[$default_lang] : '';
+    foreach ($all_langs as $lang) {
+        $excerpt = isset($excerpts[$lang]) ? $excerpts[$lang] : '';
+        if (empty($excerpt) && !empty($default_excerpt)) {
+            $excerpt = $default_excerpt;
+        }
+        $is_current = ($lang === $current_lang);
+        $data_attr = '';
+        if (!$is_current) {
+            $data_attr = ' data-translation="' . esc_attr($excerpt) . '"';
+        }
+        $formatted_excerpt .= '<span class="translate lang-' . esc_attr($lang) . '" data-lang="' . esc_attr($lang) . '"' . $data_attr . '>';
+        if ($is_current) {
+            $formatted_excerpt .= $excerpt;
+        }
+        $formatted_excerpt .= '</span>';
+    }
     $formatted_excerpt .= '</p>';
-    
     return $formatted_excerpt;
 }
 

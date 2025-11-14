@@ -140,16 +140,6 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
         return $text;
     }
     
-    // Debug logging for specific words
-    $debug_words = array('Sep', 'Categories', '« Sep');
-    $trimmed_for_debug = trim($text);
-    if (in_array($trimmed_for_debug, $debug_words) || strpos($trimmed_for_debug, 'Sep') !== false || strpos($trimmed_for_debug, 'Categories') !== false) {
-        // error_log("MULTILANG DEBUG: Processing text: '" . $trimmed_for_debug . "'");
-        // error_log("MULTILANG DEBUG: Current lang: " . $current_lang . ", Default lang: " . $default_lang);
-        // error_log("MULTILANG DEBUG: Current lang translations sections: " . print_r(array_keys($current_lang_translations), true));
-        // error_log("MULTILANG DEBUG: Default lang translations sections: " . print_r(array_keys($default_lang_translations), true));
-    }
-    
     // Preserve leading and trailing whitespace
     preg_match('/^(\s*)(.+?)(\s*)$/s', $text, $matches);
     $leading_space = isset($matches[1]) ? $matches[1] : '';
@@ -217,14 +207,6 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
             
             if (!$lang_translation && strlen($trimmed_text) <= 50) {
                 $lang_translation = multilang_process_partial_translation($trimmed_text, $lang_data);
-                
-                // Debug logging
-                if (in_array($trimmed_text, $debug_words) || strpos($trimmed_text, 'Sep') !== false || strpos($trimmed_text, 'Categories') !== false) {
-                    error_log("MULTILANG DEBUG: Lang '$lang' - partial translation result: " . ($lang_translation ? $lang_translation : 'NULL'));
-                    if (!$lang_translation) {
-                        error_log("MULTILANG DEBUG: Lang '$lang' - lang_data sections: " . print_r(array_keys($lang_data), true));
-                    }
-                }
             }
             
             if (!$lang_translation) {
