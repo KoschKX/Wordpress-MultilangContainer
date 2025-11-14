@@ -144,10 +144,10 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     $debug_words = array('Sep', 'Categories', '« Sep');
     $trimmed_for_debug = trim($text);
     if (in_array($trimmed_for_debug, $debug_words) || strpos($trimmed_for_debug, 'Sep') !== false || strpos($trimmed_for_debug, 'Categories') !== false) {
-        error_log("MULTILANG DEBUG: Processing text: '" . $trimmed_for_debug . "'");
-        error_log("MULTILANG DEBUG: Current lang: " . $current_lang . ", Default lang: " . $default_lang);
-        error_log("MULTILANG DEBUG: Current lang translations sections: " . print_r(array_keys($current_lang_translations), true));
-        error_log("MULTILANG DEBUG: Default lang translations sections: " . print_r(array_keys($default_lang_translations), true));
+        // error_log("MULTILANG DEBUG: Processing text: '" . $trimmed_for_debug . "'");
+        // error_log("MULTILANG DEBUG: Current lang: " . $current_lang . ", Default lang: " . $default_lang);
+        // error_log("MULTILANG DEBUG: Current lang translations sections: " . print_r(array_keys($current_lang_translations), true));
+        // error_log("MULTILANG DEBUG: Default lang translations sections: " . print_r(array_keys($default_lang_translations), true));
     }
     
     // Preserve leading and trailing whitespace
