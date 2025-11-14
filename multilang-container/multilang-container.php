@@ -48,7 +48,7 @@ add_action('init', function() {
         }
         
         if (!multilang_is_ajax_cache_enabled()) {
-            error_log('[Multilang] AJAX detected - preventing cache for action: ' . ($_REQUEST['action'] ?? 'unknown'));
+            // error_log('[Multilang] AJAX detected - preventing cache for action: ' . ($_REQUEST['action'] ?? 'unknown'));
             
             if (!defined('DONOTCACHEPAGE')) {
                 define('DONOTCACHEPAGE', true);

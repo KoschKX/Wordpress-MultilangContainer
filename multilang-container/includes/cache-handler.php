@@ -68,6 +68,54 @@ function multilang_get_cache_options() {
     }
     return array();
 }
+/**
+ * Fragment-based JSON caching for selector fragments
+ */
+function multilang_get_fragment_cache_file($cache_key) {
+    $cache_dir = multilang_get_cache_dir();
+    $safe_key = sanitize_file_name($cache_key);
+    return $cache_dir . $safe_key . '.fragments.json';
+}
+
+function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
+    $file = multilang_get_fragment_cache_file($cache_key);
+    $data = array();
+    if (file_exists($file)) {
+        $content = file_get_contents($file);
+        $data = json_decode($content, true) ?: array();
+    }
+    $data[$selector] = $fragment;
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    return true;
+}
+
+function multilang_get_fragment_cache($cache_key, $selector) {
+    $file = multilang_get_fragment_cache_file($cache_key);
+    if (!file_exists($file)) {
+        return false;
+    }
+    $content = file_get_contents($file);
+    $data = json_decode($content, true);
+    if (!is_array($data) || !isset($data[$selector])) {
+        return false;
+    }
+    return $data[$selector];
+}
+
+function multilang_delete_fragment_cache($cache_key, $selector) {
+    $file = multilang_get_fragment_cache_file($cache_key);
+    if (!file_exists($file)) {
+        return false;
+    }
+    $content = file_get_contents($file);
+    $data = json_decode($content, true);
+    if (!is_array($data) || !isset($data[$selector])) {
+        return false;
+    }
+    unset($data[$selector]);
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    return true;
+}
 
 /**
  * Save cache options to JSON file
@@ -130,12 +178,28 @@ function multilang_get_cache($cache_key, $expiration = 3600) {
 }
 
 function multilang_set_cache($cache_key, $data) {
+    // Optionally cache for logged-in users
+    $json_options = array();
+    if (function_exists('multilang_get_options')) {
+        $json_options = multilang_get_options();
+    }
+    $cache_logged_in = isset($json_options['cache_logged_in']) ? intval($json_options['cache_logged_in']) : 0;
+    if (function_exists('is_user_logged_in') && is_user_logged_in()) {
+        if (intval($cache_logged_in) !== 1) {
+            return false;
+        } else if (is_string($data)) {
+            // Remove admin bar markup and related scripts from HTML when caching for logged-in users
+            // Remove <div id="wpadminbar"> ... </div>
+            $data = preg_replace('/<div id="wpadminbar"[\s\S]*?<\/div>/i', '', $data);
+            // Remove admin bar <script> blocks
+            $data = preg_replace('/<script[^>]*>[^<]*customize-support[^<]*<\/script>/i', '', $data);
+            // Remove all <li> elements with id starting with wp-admin-bar-
+            $data = preg_replace('/<li[^>]+id="wp-admin-bar-[^>]+>[\s\S]*?<\/li>/i', '', $data);
+        }
+    }
     $cache_file = multilang_get_cache_file_path($cache_key);
-    
     $serialized = serialize($data);
-    
     $result = file_put_contents($cache_file, $serialized, LOCK_EX);
-    
     return $result !== false;
 }
 
@@ -161,15 +225,20 @@ function multilang_clear_all_cache() {
         return 0;
     }
     
-    $files = glob($cache_dir . '*.cache');
-    if ($files === false) {
-        return 0;
-    }
-    
-    foreach ($files as $file) {
-        if (is_file($file)) {
-            if (@unlink($file)) {
-                $deleted_count++;
+    $patterns = [
+        $cache_dir . '*.cache',
+        $cache_dir . '*.fragments.json'
+    ];
+    foreach ($patterns as $pattern) {
+        $files = glob($pattern);
+        if ($files === false) {
+            continue;
+        }
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                if (@unlink($file)) {
+                    $deleted_count++;
+                }
             }
         }
     }
@@ -508,66 +577,34 @@ function multilang_get_page_cache_key() {
 /**
  * Get cached page translation
  */
-function multilang_get_cached_page_translation($post_id, $lang) {
+
+/**
+ * Get cached fragment for a selector on a page
+ */
+function multilang_get_cached_fragment($post_id, $lang, $selector) {
     $post_modified = get_post_modified_time('U', false, $post_id);
     $cache_key = 'page_' . $post_id . '_' . $lang . '_' . $post_modified;
-    
-    return multilang_get_cache($cache_key, 0);
+    return multilang_get_fragment_cache($cache_key, $selector);
 }
 
-/**
- * Get cached content for current page
- */
-function multilang_get_cached_page_content($lang) {
-    if (!multilang_is_cache_enabled()) {
-        return false;
-    }
-    
-    $cache_base_key = multilang_get_page_cache_key();
-    
-    if ($cache_base_key === false) {
-        return false;
-    }
-    
-    $cache_key = $cache_base_key . '_' . $lang;
-    return multilang_get_cache($cache_key, 0);
-}
 
-/**
- * Set cached content for current page
- */
-function multilang_set_cached_page_content($lang, $content) {
-    if (!multilang_is_cache_enabled()) {
-        return false;
-    }
-    
-    // Never cache AJAX responses
-    if (defined('DOING_AJAX') && DOING_AJAX) {
-        return false;
-    }
-    
-    if (function_exists('wp_doing_ajax') && wp_doing_ajax()) {
-        return false;
-    }
-    
-    $cache_base_key = multilang_get_page_cache_key();
-    
-    if ($cache_base_key === false) {
-        return false;
-    }
-    
-    $cache_key = $cache_base_key . '_' . $lang;
-    return multilang_set_cache($cache_key, $content);
-}
+// PAGE-LEVEL CACHE FUNCTIONS DEPRECATED
+// Use fragment-based caching functions instead:
+// multilang_set_fragment_cache($cache_key, $selector, $fragment)
+// multilang_get_fragment_cache($cache_key, $selector)
+// multilang_delete_fragment_cache($cache_key, $selector)
 
 /**
  * Set cached page translation
  */
-function multilang_set_cached_page_translation($post_id, $lang, $translated_content) {
+
+/**
+ * Set cached fragment for a selector on a page
+ */
+function multilang_set_cached_fragment($post_id, $lang, $selector, $fragment) {
     $post_modified = get_post_modified_time('U', false, $post_id);
     $cache_key = 'page_' . $post_id . '_' . $lang . '_' . $post_modified;
-    
-    return multilang_set_cache($cache_key, $translated_content);
+    return multilang_set_fragment_cache($cache_key, $selector, $fragment);
 }
 
 /**
@@ -581,17 +618,20 @@ function multilang_clear_post_cache($post_id) {
         return 0;
     }
     
-    $pattern = $cache_dir . 'page_' . $post_id . '_*.cache';
-    $files = glob($pattern);
-    
-    if ($files === false) {
-        return 0;
-    }
-    
-    foreach ($files as $file) {
-        if (is_file($file)) {
-            if (@unlink($file)) {
-                $deleted_count++;
+    $patterns = [
+        $cache_dir . 'page_' . $post_id . '_*.cache',
+        $cache_dir . 'page_' . $post_id . '_*.fragments.json'
+    ];
+    foreach ($patterns as $pattern) {
+        $files = glob($pattern);
+        if ($files === false) {
+            continue;
+        }
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                if (@unlink($file)) {
+                    $deleted_count++;
+                }
             }
         }
     }
@@ -849,3 +889,16 @@ function multilang_save_cache_excerpt_settings($excerpt_settings) {
     $options['excerpt_settings'] = $excerpt_settings;
     multilang_save_cache_options($options);
 }
+
+// Ensure admin bar is shown for logged-in users even if page is cached
+add_action('wp_footer', function() {
+    if (function_exists('is_user_logged_in') && is_user_logged_in() && function_exists('wp_admin_bar_render')) {
+        wp_admin_bar_render();
+    }
+});
+
+add_action('wp_body_open', function() {
+    if (function_exists('is_user_logged_in') && is_user_logged_in() && function_exists('wp_admin_bar_render')) {
+        wp_admin_bar_render();
+    }
+});

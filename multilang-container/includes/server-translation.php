@@ -603,23 +603,99 @@ function multilang_process_entire_page($html) {
         //return $html;
     }
     
-    // Get current language for cache key
+    // Get current language and post ID for cache key
     $current_lang = multilang_get_current_language();
-    
-    // Try to get cached version
-    $cached_html = multilang_get_cached_page_content($current_lang);
-    
-    if ($cached_html !== false) {
-        return $cached_html;
+    global $post;
+    $post_id = isset($post) && !empty($post->ID) ? $post->ID : null;
+
+    // Get structure data and selectors
+    $structure_data = multilang_get_cached_structure_data();
+    if (!$structure_data || !is_array($structure_data)) {
+        // Fallback: process whole page
+        return multilang_server_side_translate($html);
     }
-    
-    // Process the HTML
+
+    // For each section/selector, try to get cached fragment
+    $fragments = array();
+    $all_found = true;
+    foreach ($structure_data as $section => $config) {
+        if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
+        foreach ($config['_selectors'] as $selector) {
+            if ($post_id) {
+                $fragment = multilang_get_cached_fragment($post_id, $current_lang, $selector);
+                if ($fragment !== false) {
+                    $fragments[$selector] = $fragment;
+                } else {
+                    $all_found = false;
+                }
+            } else {
+                $all_found = false;
+            }
+        }
+    }
+
+    // If all fragments are found, inject them and bypass heavy work
+    if ($all_found && !empty($fragments)) {
+        // Simple replacement: inject fragments by selector
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        $xpath = new DOMXPath($dom);
+        foreach ($fragments as $selector => $fragment_html) {
+            $xp = multilang_css_to_xpath($selector);
+            if ($xp) {
+                $nodes = $xpath->query($xp);
+                foreach ($nodes as $node) {
+                    // Replace node innerHTML with fragment
+                    while ($node->hasChildNodes()) {
+                        $node->removeChild($node->firstChild);
+                    }
+                    $fragment_dom = new DOMDocument();
+                    libxml_use_internal_errors(true);
+                    $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                    libxml_clear_errors();
+                    $body_node = $fragment_dom->getElementsByTagName('body')->item(0);
+                    if ($body_node && $body_node->hasChildNodes()) {
+                        foreach ($body_node->childNodes as $child) {
+                            $imported = $dom->importNode($child, true);
+                            $node->appendChild($imported);
+                        }
+                    }
+                }
+            }
+        }
+        $result_html = $dom->saveHTML();
+        $result_html = str_replace('</head>', '<!-- Fragments loaded from cache --></head>', $result_html);
+        return $result_html;
+    }
+
+    // Otherwise, process the HTML and cache fragments
     $processed_html = multilang_server_side_translate($html);
     $processed_html = str_replace('</head>', '<!-- Server-side translation processed and cached --></head>', $processed_html);
-    
-    // Cache the result
-    multilang_set_cached_page_content($current_lang, $processed_html);
-    
+
+    // Optionally: extract and cache fragments for each selector
+    if ($post_id) {
+        $dom = new DOMDocument();
+        libxml_use_internal_errors(true);
+        $dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        libxml_clear_errors();
+        $xpath = new DOMXPath($dom);
+        foreach ($structure_data as $section => $config) {
+            if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
+            foreach ($config['_selectors'] as $selector) {
+                $xp = multilang_css_to_xpath($selector);
+                if ($xp) {
+                    $nodes = $xpath->query($xp);
+                    foreach ($nodes as $node) {
+                        $fragment_html = $dom->saveHTML($node);
+                        multilang_set_cached_fragment($post_id, $current_lang, $selector, $fragment_html);
+                    }
+                }
+            }
+        }
+    }
+
     return $processed_html;
 }
 

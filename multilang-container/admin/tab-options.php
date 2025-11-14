@@ -54,6 +54,7 @@ function multilang_ajax_save_cache_settings() {
     $options['cache_debug_logging'] = isset($_POST['cache_debug_logging']) ? intval($_POST['cache_debug_logging']) : 0;
     $options['cache_ajax_requests'] = isset($_POST['cache_ajax_requests']) ? intval($_POST['cache_ajax_requests']) : 0;
     $options['cache_exclude_pages'] = isset($_POST['cache_exclude_pages']) ? sanitize_textarea_field($_POST['cache_exclude_pages']) : '';
+    $options['cache_logged_in'] = (isset($_POST['cache_logged_in']) && intval($_POST['cache_logged_in']) === 1) ? 1 : 0;
     multilang_save_options($options);
     
     // Also save to WordPress options for faster access
@@ -98,6 +99,7 @@ function multilang_handle_options_save() {
         $options = multilang_get_options();
         $options['excerpt_line_limit_enabled'] = isset($_POST['multilang_excerpt_line_limit_enabled']) ? 1 : 0;
         $options['excerpt_line_limit'] = isset($_POST['multilang_excerpt_line_limit']) ? intval($_POST['multilang_excerpt_line_limit']) : 0;
+        $options['cache_logged_in'] = isset($_POST['multilang_cache_logged_in']) && intval($_POST['multilang_cache_logged_in']) === 1 ? 1 : 0;
         multilang_save_options($options);
     }
 }
@@ -112,6 +114,7 @@ function multilang_render_options_tab($active_tab) {
     $cache_debug_logging = isset($options['cache_debug_logging']) ? $options['cache_debug_logging'] : 0; // Disabled by default
     $cache_ajax_requests = isset($options['cache_ajax_requests']) ? $options['cache_ajax_requests'] : 0; // Disabled by default
     $cache_exclude_pages = isset($options['cache_exclude_pages']) ? $options['cache_exclude_pages'] : '';
+    $cache_logged_in = isset($options['cache_logged_in']) ? intval($options['cache_logged_in']) : 0;
     
     // Get cache info
     $cache_info = multilang_get_cache_info();
@@ -143,6 +146,15 @@ function multilang_render_options_tab($active_tab) {
                     <?php checked($cache_enabled, 1); ?>
                 />
                 <p class="description">Cache translated pages/posts. Cache is automatically cleared when content is saved.</p>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">
+                <label for="multilang_cache_logged_in">Cache pages for logged-in users?</label>
+            </th>
+            <td>
+                <input type="checkbox" id="multilang_cache_logged_in" name="multilang_cache_logged_in" value="1" <?php checked($cache_logged_in, 1); ?> />
+                <span class="description">If checked, pages will be cached for logged-in users (admin bar will be removed from cached content).</span>
             </td>
         </tr>
         <tr>
@@ -245,7 +257,8 @@ function multilang_render_options_tab($active_tab) {
                     cache_enabled: $('#multilang_cache_enabled').is(':checked') ? 1 : 0,
                     cache_ajax_requests: $('#multilang_cache_ajax_requests').is(':checked') ? 1 : 0,
                     cache_exclude_pages: $('#multilang_cache_exclude_pages').val(),
-                    cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0
+                    cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0,
+                    cache_logged_in: $('#multilang_cache_logged_in').is(':checked') ? 1 : 0
                 },
                 success: function(response) {
                     $spinner.removeClass('is-active');
