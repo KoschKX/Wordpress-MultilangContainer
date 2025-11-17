@@ -600,13 +600,14 @@ function multilang_process_entire_page($html) {
     // For each section/selector, try to get cached fragment
     $fragments = array();
     $all_found = true;
+    $cache_key = 'page_' . $post_id . '_' . get_post_modified_time('U', false, $post_id);
     foreach ($structure_data as $section => $config) {
         if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
         foreach ($config['_selectors'] as $selector) {
             if ($post_id) {
-                $fragment = multilang_get_cached_fragment($post_id, $current_lang, $selector);
-                if ($fragment !== false) {
-                    $fragments[$selector] = $fragment;
+                $fragment_html = multilang_get_fragment_cache($cache_key, $selector);
+                if ($fragment_html !== false && is_string($fragment_html)) {
+                    $fragments[$selector] = $fragment_html;
                 } else {
                     $all_found = false;
                 }
@@ -629,35 +630,35 @@ function multilang_process_entire_page($html) {
             if ($xp) {
                 $nodes = $xpath->query($xp);
                 foreach ($nodes as $node) {
-                    // Replace node innerHTML with fragment
-                    while ($node->hasChildNodes()) {
-                        $node->removeChild($node->firstChild);
+                    // Debug: Log what is being injected for #music
+                    if ($selector === '#music') {
+                        error_log('[multilang] Injecting fragment for #music: ' . substr($fragment_html, 0, 500));
+                    }
+                    // Replace node innerHTML with fragment, but keep multilang container if present
+                    $has_multilang = false;
+                    foreach ($node->childNodes as $child) {
+                        if ($child->nodeType === XML_ELEMENT_NODE && strpos($child->getAttribute('class'), 'multilang-container') !== false) {
+                            $has_multilang = true;
+                            break;
+                        }
+                    }
+                    if (!$has_multilang) {
+                        while ($node->hasChildNodes()) {
+                            $node->removeChild($node->firstChild);
+                        }
                     }
                     $fragment_dom = new DOMDocument();
                     libxml_use_internal_errors(true);
                     $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                     libxml_clear_errors();
                     $body_node = $fragment_dom->getElementsByTagName('body')->item(0);
-                        $imported_count = 0;
-                        if ($body_node && $body_node->hasChildNodes()) {
-                            foreach ($body_node->childNodes as $child) {
-                                $imported = $dom->importNode($child, true);
-                                $node->appendChild($imported);
-                                $imported_count++;
-                            }
-                        } else if ($selector === '#music' && $fragment_dom->documentElement && $fragment_dom->documentElement->hasChildNodes()) {
-                            foreach ($fragment_dom->documentElement->childNodes as $child) {
-                                $imported = $dom->importNode($child, true);
-                                $node->appendChild($imported);
-                                $imported_count++;
-                            }
-                        }
-                        if ($selector === '#music') {
-                            error_log('[multilang-cache] Imported child nodes for #music: ' . $imported_count);
-                            error_log('[multilang-cache] After robust insertion, node outerHTML: ' . $dom->saveHTML($node));
-                        }
                     if ($body_node && $body_node->hasChildNodes()) {
                         foreach ($body_node->childNodes as $child) {
+                            $imported = $dom->importNode($child, true);
+                            $node->appendChild($imported);
+                        }
+                    } else if ($selector === '#music' && $fragment_dom->documentElement && $fragment_dom->documentElement->hasChildNodes()) {
+                        foreach ($fragment_dom->documentElement->childNodes as $child) {
                             $imported = $dom->importNode($child, true);
                             $node->appendChild($imported);
                         }
@@ -681,6 +682,7 @@ function multilang_process_entire_page($html) {
         $dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
         libxml_clear_errors();
         $xpath = new DOMXPath($dom);
+        $cache_key = 'page_' . $post_id . '_' . get_post_modified_time('U', false, $post_id);
         foreach ($structure_data as $section => $config) {
             if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
             foreach ($config['_selectors'] as $selector) {
@@ -689,7 +691,7 @@ function multilang_process_entire_page($html) {
                     $nodes = $xpath->query($xp);
                     foreach ($nodes as $node) {
                         $fragment_html = $dom->saveHTML($node);
-                        multilang_set_cached_fragment($post_id, $current_lang, $selector, $fragment_html);
+                        multilang_set_fragment_cache($cache_key, $selector, $fragment_html);
                     }
                 }
             }

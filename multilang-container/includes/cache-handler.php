@@ -84,6 +84,7 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
         $content = file_get_contents($file);
         $data = json_decode($content, true) ?: array();
     }
+    // $fragment should be a single HTML string (not per-language)
     $data[$selector] = $fragment;
     file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     return true;
