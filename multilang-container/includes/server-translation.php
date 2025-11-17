@@ -638,6 +638,24 @@ function multilang_process_entire_page($html) {
                     $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                     libxml_clear_errors();
                     $body_node = $fragment_dom->getElementsByTagName('body')->item(0);
+                        $imported_count = 0;
+                        if ($body_node && $body_node->hasChildNodes()) {
+                            foreach ($body_node->childNodes as $child) {
+                                $imported = $dom->importNode($child, true);
+                                $node->appendChild($imported);
+                                $imported_count++;
+                            }
+                        } else if ($selector === '#music' && $fragment_dom->documentElement && $fragment_dom->documentElement->hasChildNodes()) {
+                            foreach ($fragment_dom->documentElement->childNodes as $child) {
+                                $imported = $dom->importNode($child, true);
+                                $node->appendChild($imported);
+                                $imported_count++;
+                            }
+                        }
+                        if ($selector === '#music') {
+                            error_log('[multilang-cache] Imported child nodes for #music: ' . $imported_count);
+                            error_log('[multilang-cache] After robust insertion, node outerHTML: ' . $dom->saveHTML($node));
+                        }
                     if ($body_node && $body_node->hasChildNodes()) {
                         foreach ($body_node->childNodes as $child) {
                             $imported = $dom->importNode($child, true);
