@@ -657,6 +657,21 @@ function multilang_process_entire_page($html) {
                             $imported = $dom->importNode($child, true);
                             $node->appendChild($imported);
                         }
+                            // Remove content from .lang-xx containers except current language
+                            $available_langs = get_multilang_available_languages();
+                            foreach ($available_langs as $lang) {
+                                if ($lang !== $current_lang_cache) {
+                                    $lang_nodes = $node->getElementsByTagName('div');
+                                    foreach ($lang_nodes as $lang_node) {
+                                        $class = $lang_node->getAttribute('class');
+                                        if (strpos($class, 'translate') !== false && strpos($class, 'lang-' . $lang) !== false) {
+                                            while ($lang_node->hasChildNodes()) {
+                                                $lang_node->removeChild($lang_node->firstChild);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                     } else if ($selector === '#music' && $fragment_dom->documentElement && $fragment_dom->documentElement->hasChildNodes()) {
                         foreach ($fragment_dom->documentElement->childNodes as $child) {
                             $imported = $dom->importNode($child, true);
