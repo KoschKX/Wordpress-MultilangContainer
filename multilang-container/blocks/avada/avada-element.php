@@ -172,6 +172,10 @@ function multilang_avada_shortcode($atts) {
             $content_to_use = $default_content;
         }
         
+        // Remove fusion classes from content
+        $content_to_use = preg_replace('/class=("|\')([^"\']*?)(fusion-column-wrapper|fusion-flex-justify-content-flex-start|fusion-content-layout-column)([^"\']*?)("|\')/i',
+            'class=$1' . trim(preg_replace('/(fusion-column-wrapper|fusion-flex-justify-content-flex-start|fusion-content-layout-column)/', '', '$2$4')) . '$5', $content_to_use);
+       
         $lang_divs[] = '<div class="translate lang-' . esc_attr($lang) . '">' . $content_to_use . '</div>';
     }
     
@@ -273,6 +277,9 @@ function multilang_filter_content($content) {
                         $content_to_use = $default_content;
                     }
                     
+                    // Remove unwanted fusion classes from content inside translate lang-xx
+                    $content_to_use = preg_replace('/class=("|\')([^"\']*?)(fusion-column-wrapper|fusion-flex-justify-content-flex-start|fusion-content-layout-column)([^"\']*?)("|\')/i',
+                        'class=$1' . trim(preg_replace('/(fusion-column-wrapper|fusion-flex-justify-content-flex-start|fusion-content-layout-column)/', '', '$2$4')) . '$5', $content_to_use);
                     $lang_divs[] = '<div class="translate lang-' . esc_attr($lang) . '">' . $content_to_use . '</div>';
                 }
                 

@@ -27,7 +27,7 @@ function multilang_get_formatted_excerpt($post_id = null) {
     
     $formatted_excerpt = '<p class="multilang-wrapper">';
     $all_langs = array();
-    // Get all possible languages (from option or from excerpts array keys)
+  
     if (function_exists('get_option')) {
         $all_langs = get_option('multilang_container_languages', array_keys($excerpts));
     }
