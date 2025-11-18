@@ -3,6 +3,10 @@
 (() => {
     'use strict';
 
+    console.log('multilang-translate.js loaded');
+
+    // return;
+
     // hide filter determines display handling
     var hideFilterEnabled = false;
 

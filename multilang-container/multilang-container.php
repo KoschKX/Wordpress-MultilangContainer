@@ -24,7 +24,7 @@ if (defined('DOING_AJAX') && DOING_AJAX) {
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
-require_once plugin_dir_path(__FILE__) . 'includes/admin-bar-menu.php';
+//require_once plugin_dir_path(__FILE__) . 'includes/admin-bar-menu.php';
 require_once plugin_dir_path(__FILE__) . 'includes/language-switcher.php';
 require_once plugin_dir_path(__FILE__) . 'includes/assets-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/server-translation.php';

@@ -14,6 +14,20 @@ if (!defined('ABSPATH')) {
  * Add language attribute to HTML
  */
 function lang_attribute( $output ) {
+    $default_lang = get_multilang_default_language();
+    $current_lang = $default_lang;
+    
+    if ( isset($_COOKIE['lang']) ) {
+        $cookie_lang = sanitize_text_field($_COOKIE['lang']);
+        $available_langs = get_multilang_available_languages();
+        if ( in_array($cookie_lang, $available_langs) ) {
+            $current_lang = $cookie_lang;
+        }
+    }
+    
+    // Add data-lang attribute for CSS targeting
+    $output .= ' data-lang="' . esc_attr($current_lang) . '"';
+    
     return $output;
 }
 add_filter( 'language_attributes', 'lang_attribute' );

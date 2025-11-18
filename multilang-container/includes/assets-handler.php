@@ -10,6 +10,8 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+require_once __DIR__ . '/cache-handler.php';
+
 /**
  * Pure CSS solution - hide all languages by default, show only the one with matching body class
  * Now with caching support!
