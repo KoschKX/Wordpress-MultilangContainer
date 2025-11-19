@@ -46,9 +46,7 @@ function multilang_get_title($post_id = null, $lang = null) {
 	return $original_title;
 }
 
-/**
- * Shortcode for displaying translated title
- */
+// Shortcode for showing the translated title
 function multilang_title_shortcode($atts) {
 	$atts = shortcode_atts(array(
 		'post_id' => null,
@@ -59,9 +57,7 @@ function multilang_title_shortcode($atts) {
 }
 add_shortcode('multilang_title', 'multilang_title_shortcode');
 
-/**
- * Filter to automatically replace titles in frontend
- */
+// Filter to automatically swap out titles on the frontend
 function multilang_filter_the_title($title, $post_id = null) {
 	// Prevent infinite recursion
 	static $processing = false;

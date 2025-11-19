@@ -4,60 +4,69 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Helper function to get options file path
-function multilang_get_options_file_path() {
-    $upload_dir = wp_upload_dir();
-    $multilang_dir = trailingslashit($upload_dir['basedir']) . 'multilang/';
-    if (!is_dir($multilang_dir)) {
-        wp_mkdir_p($multilang_dir);
+// Get the path to the options file
+if (!function_exists('multilang_get_options_file_path')) {
+    function multilang_get_options_file_path() {
+        $upload_dir = wp_upload_dir();
+        $multilang_dir = trailingslashit($upload_dir['basedir']) . 'multilang/';
+        if (!is_dir($multilang_dir)) {
+            wp_mkdir_p($multilang_dir);
+        }
+        return $multilang_dir . 'options.json';
     }
-    return $multilang_dir . 'options.json';
 }
 
-// Get all options from JSON file
-function multilang_get_options() {
-    $file_path = multilang_get_options_file_path();
-    if (!file_exists($file_path)) {
-        return array();
+// Read plugin options from the JSON file
+if (!function_exists('multilang_get_options')) {
+    function multilang_get_options() {
+        $file_path = multilang_get_options_file_path();
+        if (!file_exists($file_path)) {
+            return array();
+        }
+        $json_content = file_get_contents($file_path);
+        $options = json_decode($json_content, true);
+        return is_array($options) ? $options : array();
     }
-    $json_content = file_get_contents($file_path);
-    $options = json_decode($json_content, true);
-    return is_array($options) ? $options : array();
 }
 
-// Save all options to JSON file
-function multilang_save_options($options) {
-    $file_path = multilang_get_options_file_path();
-    $json_content = json_encode($options, JSON_PRETTY_PRINT);
-    file_put_contents($file_path, $json_content);
+// Save plugin options to the JSON file
+if (!function_exists('multilang_save_options')) {
+    function multilang_save_options($options) {
+        $file_path = multilang_get_options_file_path();
+        $json_content = json_encode($options, JSON_PRETTY_PRINT);
+        file_put_contents($file_path, $json_content);
+    }
 }
 
-/**
- * AJAX handler to save cache settings
- */
+// Handles AJAX requests to save cache settings
 function multilang_ajax_save_cache_settings() {
-    // Check permissions
+    // Make sure the user has permission
     if (!current_user_can('manage_options')) {
         wp_send_json_error(array('message' => 'Permission denied.'));
         return;
     }
     
-    // Verify nonce
+    // Security check for the request
     if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'multilang_cache_settings_nonce')) {
         wp_send_json_error(array('message' => 'Invalid nonce.'));
         return;
     }
     
-    // Get and save settings
+    // Read settings from the request and save them
     $options = multilang_get_options();
-    $options['cache_enabled'] = isset($_POST['cache_enabled']) ? intval($_POST['cache_enabled']) : 0;
-    $options['cache_debug_logging'] = isset($_POST['cache_debug_logging']) ? intval($_POST['cache_debug_logging']) : 0;
-    $options['cache_ajax_requests'] = isset($_POST['cache_ajax_requests']) ? intval($_POST['cache_ajax_requests']) : 0;
-    $options['cache_exclude_pages'] = isset($_POST['cache_exclude_pages']) ? sanitize_textarea_field($_POST['cache_exclude_pages']) : '';
-    $options['cache_logged_in'] = (isset($_POST['cache_logged_in']) && intval($_POST['cache_logged_in']) === 1) ? 1 : 0;
+    $options['cache_enabled'] = isset($_POST['multilang_cache_enabled']) ? intval($_POST['multilang_cache_enabled']) : 0;
+    $options['cache_debug_logging'] = isset($_POST['multilang_cache_debug_logging']) ? intval($_POST['multilang_cache_debug_logging']) : 0;
+    $options['cache_ajax_requests'] = isset($_POST['multilang_cache_ajax_requests']) ? intval($_POST['multilang_cache_ajax_requests']) : 0;
+    $options['cache_exclude_pages'] = isset($_POST['multilang_cache_exclude_pages']) ? sanitize_textarea_field($_POST['multilang_cache_exclude_pages']) : '';
+    $options['cache_logged_in'] = (isset($_POST['multilang_cache_logged_in']) && intval($_POST['multilang_cache_logged_in']) === 1) ? 1 : 0;
+    $options['excerpt_line_limit_enabled'] = isset($_POST['multilang_excerpt_line_limit_enabled']) ? intval($_POST['multilang_excerpt_line_limit_enabled']) : 0;
+    $options['excerpt_line_limit'] = isset($_POST['multilang_excerpt_line_limit']) ? intval($_POST['multilang_excerpt_line_limit']) : 0;
+    $options['language_query_string_enabled'] = isset($_POST['multilang_language_query_string_enabled']) ? intval($_POST['multilang_language_query_string_enabled']) : 0;
+    $options['language_switcher_query_string'] = isset($_POST['multilang_language_switcher_query_string']) ? intval($_POST['multilang_language_switcher_query_string']) : 0;
+    $options['language_switcher_refresh_on_switch'] = isset($_POST['multilang_language_switcher_refresh_on_switch']) ? intval($_POST['multilang_language_switcher_refresh_on_switch']) : 0;
     multilang_save_options($options);
     
-    // Also save to WordPress options for faster access
+    // Store some settings in WordPress options for quick access
     update_option('multilang_container_cache_enabled', $options['cache_enabled']);
     update_option('multilang_container_cache_debug_logging', $options['cache_debug_logging']);
     update_option('multilang_container_cache_ajax_requests', $options['cache_ajax_requests']);
@@ -67,9 +76,7 @@ function multilang_ajax_save_cache_settings() {
 }
 add_action('wp_ajax_multilang_save_cache_settings', 'multilang_ajax_save_cache_settings');
 
-/**
- * AJAX handler to clear cache
- */
+// Handles AJAX requests to clear the cache
 function multilang_ajax_clear_cache_option() {
     // Check permissions
     if (!current_user_can('manage_options')) {
@@ -100,6 +107,9 @@ function multilang_handle_options_save() {
         $options['excerpt_line_limit_enabled'] = isset($_POST['multilang_excerpt_line_limit_enabled']) ? 1 : 0;
         $options['excerpt_line_limit'] = isset($_POST['multilang_excerpt_line_limit']) ? intval($_POST['multilang_excerpt_line_limit']) : 0;
         $options['cache_logged_in'] = isset($_POST['multilang_cache_logged_in']) && intval($_POST['multilang_cache_logged_in']) === 1 ? 1 : 0;
+    $options['language_query_string_enabled'] = isset($_POST['multilang_language_query_string_enabled']) ? 1 : 0;
+    $options['language_switcher_query_string'] = isset($_POST['multilang_language_switcher_query_string']) ? 1 : 0;
+    $options['language_switcher_refresh_on_switch'] = isset($_POST['multilang_language_switcher_refresh_on_switch']) ? 1 : 0;
         multilang_save_options($options);
     }
 }
@@ -108,6 +118,9 @@ add_action('admin_init', 'multilang_handle_options_save');
 // Render options tab content
 function multilang_render_options_tab($active_tab) {
     $options = multilang_get_options();
+    $language_query_string_enabled = isset($options['language_query_string_enabled']) ? $options['language_query_string_enabled'] : 1;
+    $language_switcher_query_string = isset($options['language_switcher_query_string']) ? $options['language_switcher_query_string'] : 1;
+    $language_switcher_refresh_on_switch = isset($options['language_switcher_refresh_on_switch']) ? $options['language_switcher_refresh_on_switch'] : 0;
     $line_limit_enabled = isset($options['excerpt_line_limit_enabled']) ? $options['excerpt_line_limit_enabled'] : 0;
     $line_limit = isset($options['excerpt_line_limit']) ? $options['excerpt_line_limit'] : '';
     $cache_enabled = isset($options['cache_enabled']) ? $options['cache_enabled'] : 1; // Enabled by default
@@ -145,7 +158,7 @@ function multilang_render_options_tab($active_tab) {
                     value="1"
                     <?php checked($cache_enabled, 1); ?>
                 />
-                <p class="description">Cache translated pages/posts. Cache is automatically cleared when content is saved.</p>
+                <span class="description">Cache translated pages/posts. Cache is automatically cleared when content is saved.</span>
             </td>
         </tr>
         <tr>
@@ -169,7 +182,7 @@ function multilang_render_options_tab($active_tab) {
                     value="1"
                     <?php checked($cache_ajax_requests, 1); ?>
                 />
-                <p class="description">Cache AJAX requests (like "load more" posts). <strong>Disable this if you experience issues with dynamic content loading.</strong></p>
+                <span class="description">Cache AJAX requests (like "load more" posts). <strong>Disable this if you experience issues with dynamic content loading.</strong></span>
             </td>
         </tr>
         <tr>
@@ -199,7 +212,7 @@ function multilang_render_options_tab($active_tab) {
                     value="1"
                     <?php checked($cache_debug_logging, 1); ?>
                 />
-                <p class="description">Log cache hits, misses, generation, and clearing to the PHP error log (debug.log). Useful for troubleshooting.</p>
+                <span class="description">Log cache hits, misses, generation, and clearing to the PHP error log (debug.log). Useful for troubleshooting.</span>
             </td>
         </tr>
         <tr>
@@ -227,7 +240,6 @@ function multilang_render_options_tab($active_tab) {
     </table>
     
     <div style="display: flex; gap: 10px; align-items: center;">
-        <button type="submit" class="button button-primary" id="multilang-save-cache-settings">Save Settings</button>
         <button type="button" class="button button-secondary" id="multilang-clear-cache-btn">Clear All Cache</button>
         <span id="multilang-cache-spinner" class="spinner" style="float:none;margin:0;"></span>
     </div>
@@ -258,7 +270,8 @@ function multilang_render_options_tab($active_tab) {
                     cache_ajax_requests: $('#multilang_cache_ajax_requests').is(':checked') ? 1 : 0,
                     cache_exclude_pages: $('#multilang_cache_exclude_pages').val(),
                     cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0,
-                    cache_logged_in: $('#multilang_cache_logged_in').is(':checked') ? 1 : 0
+                    cache_logged_in: $('#multilang_cache_logged_in').is(':checked') ? 1 : 0,
+                    language_switcher_query_string: $('#multilang_language_switcher_query_string').is(':checked') ? 1 : 0
                 },
                 success: function(response) {
                     $spinner.removeClass('is-active');
@@ -407,10 +420,196 @@ function multilang_render_options_tab($active_tab) {
         </tr>
     </table>
     
-    <?php 
-    submit_button('Save Settings', 'primary', 'multilang_save_options');
-    ?>
+    <!-- Save button removed from Excerpt section -->
     </form>
+    
+    <h2 style="margin-top:2em;">Language Switcher</h2>
+    <form method="post" action="" style="background:#fff;padding:2em 2em 1em 2em;border-radius:1em;box-shadow:0 2px 16px rgba(0,0,0,0.07);">
+    <?php wp_nonce_field('multilang_options_nonce'); ?>
+    <table class="form-table">
+        <tr>
+            <th scope="row">
+                <label for="multilang_language_query_string_enabled">Enable query string language switching</label>
+            </th>
+            <td>
+                <input type="checkbox" id="multilang_language_query_string_enabled" name="multilang_language_query_string_enabled" value="1"<?php checked($language_query_string_enabled, 1); ?> />
+                <span class="description">If checked, you can use <code>?lang=xx</code> in the address bar to switch languages.</span>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">
+                <label for="multilang_language_switcher_query_string">Use query string in language switcher</label>
+            </th>
+            <td>
+                <input type="checkbox" id="multilang_language_switcher_query_string" name="multilang_language_switcher_query_string" value="1"<?php checked(isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'], 1); ?> <?php echo $language_query_string_enabled ? '' : 'disabled="disabled"'; ?> />
+                <span class="description">If checked, language switcher links will use <code>?lang=xx</code> in the URL for caching and SEO.</span>
+            </td>
+        </tr>
+        <tr>
+            <th scope="row">
+                <label for="multilang_language_switcher_refresh_on_switch">Refresh page on language switch</label>
+            </th>
+            <td>
+                <input type="checkbox" id="multilang_language_switcher_refresh_on_switch" name="multilang_language_switcher_refresh_on_switch" value="1"<?php checked($language_switcher_refresh_on_switch, 1); ?> />
+                <span class="description">If checked, switching languages will reload the page. If unchecked, only the query string in the address bar will change (no refresh).</span>
+            </td>
+        </tr>
+    </table>
+    <!-- Save button removed from Language Switcher section -->
+    </form>
+    <div style="margin-top:2em;text-align:center;">
+        <button type="button" class="button button-primary" id="multilang-save-all-settings">Save All Settings</button>
+    </div>
+    <script>
+    jQuery(document).ready(function($) {
+        // Remove individual form submissions
+        $('#multilang-cache-form, #multilang-excerpt-form, #multilang-language-form').on('submit', function(e) {
+            e.preventDefault();
+        });
+
+        // Live enable/disable for language switcher query string
+        function updateLanguageSwitcherQueryStringState() {
+            var $enable = $('#multilang_language_query_string_enabled');
+            var $switcher = $('#multilang_language_switcher_query_string');
+            if ($enable.is(':checked')) {
+                $switcher.prop('disabled', false).closest('td').css('opacity', 1);
+            } else {
+                $switcher.prop('disabled', true).closest('td').css('opacity', 0.5);
+            }
+        }
+        updateLanguageSwitcherQueryStringState();
+        $('#multilang_language_query_string_enabled').on('change', updateLanguageSwitcherQueryStringState);
+
+        // Save all settings via AJAX
+        $('#multilang-save-all-settings').on('click', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            $btn.prop('disabled', true);
+            var $spinner = $('#multilang-cache-spinner');
+            var $message = $('#multilang-cache-message');
+            $spinner.addClass('is-active');
+            $message.hide();
+
+            // Collect all values from all sections
+            var data = {
+                action: 'multilang_save_cache_settings',
+                nonce: '<?php echo wp_create_nonce('multilang_cache_settings_nonce'); ?>',
+                multilang_cache_enabled: $('#multilang_cache_enabled').is(':checked') ? 1 : 0,
+                multilang_cache_logged_in: $('#multilang_cache_logged_in').is(':checked') ? 1 : 0,
+                multilang_cache_ajax_requests: $('#multilang_cache_ajax_requests').is(':checked') ? 1 : 0,
+                multilang_cache_exclude_pages: $('#multilang_cache_exclude_pages').val(),
+                multilang_cache_debug_logging: $('#multilang_cache_debug_logging').is(':checked') ? 1 : 0,
+                multilang_excerpt_line_limit_enabled: $('#multilang_excerpt_line_limit_enabled').is(':checked') ? 1 : 0,
+                multilang_excerpt_line_limit: $('#multilang_excerpt_line_limit').val(),
+                multilang_language_query_string_enabled: $('#multilang_language_query_string_enabled').is(':checked') ? 1 : 0,
+                multilang_language_switcher_query_string: $('#multilang_language_switcher_query_string').is(':checked') ? 1 : 0,
+                multilang_language_switcher_refresh_on_switch: $('#multilang_language_switcher_refresh_on_switch').is(':checked') ? 1 : 0
+            };
+
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: data,
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    if (response.success) {
+                        $message.removeClass('error').addClass('success')
+                            .css({
+                                'background-color': '#d4edda',
+                                'border': '1px solid #c3e6cb',
+                                'color': '#155724'
+                            })
+                            .text('Settings saved successfully.')
+                            .slideDown();
+                    } else {
+                        $message.removeClass('success').addClass('error')
+                            .css({
+                                'background-color': '#f8d7da',
+                                'border': '1px solid #f5c6cb',
+                                'color': '#721c24'
+                            })
+                            .text(response.data.message || 'Failed to save settings.')
+                            .slideDown();
+                    }
+                    setTimeout(function() {
+                        $message.slideUp();
+                    }, 3000);
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    $message.removeClass('success').addClass('error')
+                        .css({
+                            'background-color': '#f8d7da',
+                            'border': '1px solid #f5c6cb',
+                            'color': '#721c24'
+                        })
+                        .text('An error occurred while saving settings.')
+                        .slideDown();
+                }
+            });
+        });
+
+        // Clear cache via AJAX
+        $('#multilang-clear-cache-btn').on('click', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var $message = $('#multilang-cache-message');
+            var $spinner = $('#multilang-cache-spinner');
+            if (!confirm('Are you sure you want to clear all cache files?')) {
+                return;
+            }
+            $spinner.addClass('is-active');
+            $btn.prop('disabled', true);
+            $message.hide();
+            $.ajax({
+                url: ajaxurl,
+                type: 'POST',
+                data: {
+                    action: 'multilang_clear_cache',
+                    nonce: '<?php echo wp_create_nonce('multilang_cache_nonce'); ?>'
+                },
+                success: function(response) {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    if (response.success) {
+                        $message.removeClass('error').addClass('success')
+                            .css({
+                                'background-color': '#d4edda',
+                                'border': '1px solid #c3e6cb',
+                                'color': '#155724'
+                            })
+                            .text(response.data.message)
+                            .slideDown();
+                        location.reload();
+                    } else {
+                        $message.removeClass('success').addClass('error')
+                            .css({
+                                'background-color': '#f8d7da',
+                                'border': '1px solid #f5c6cb',
+                                'color': '#721c24'
+                            })
+                            .text(response.data.message || 'Failed to clear cache.')
+                            .slideDown();
+                    }
+                },
+                error: function() {
+                    $spinner.removeClass('is-active');
+                    $btn.prop('disabled', false);
+                    $message.removeClass('success').addClass('error')
+                        .css({
+                            'background-color': '#f8d7da',
+                            'border': '1px solid #f5c6cb',
+                            'color': '#721c24'
+                        })
+                        .text('An error occurred while clearing cache.')
+                        .slideDown();
+                }
+            });
+        });
+    });
+    </script>
     <?php
     echo '</div>';
 }

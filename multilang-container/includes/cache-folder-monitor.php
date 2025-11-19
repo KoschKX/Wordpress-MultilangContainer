@@ -1,5 +1,5 @@
 <?php
-// Cache folder monitor - watches external cache plugins and syncs
+// Monitors cache folders and keeps in sync with external cache plugins
 
 if (!defined('ABSPATH')) {
     exit;
@@ -67,7 +67,7 @@ function multilang_hook_wpfc_clear() {
     add_action('wpfc_clear_cache_of_allsites', 'multilang_clear_all_cache');
     add_action('wpfc_delete_cache', 'multilang_clear_all_cache');
     
-    // Exclude AJAX requests from being cached by WPFC - priority 1 to run early
+    // Make sure AJAX requests aren't cached by WPFC (run early)
     add_filter('wpfc_is_cacheable', function($cacheable) {
         if (wp_doing_ajax()) {
             return false;
@@ -77,7 +77,7 @@ function multilang_hook_wpfc_clear() {
 }
 add_action('plugins_loaded', 'multilang_hook_wpfc_clear', 1);
 
-// Hook into other popular cache plugins
+// Add hooks for other popular cache plugins
 function multilang_hook_other_cache_plugins() {
     add_action('w3tc_flush_all', 'multilang_clear_all_cache');
     add_action('w3tc_flush_posts', 'multilang_clear_all_cache');

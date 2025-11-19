@@ -12,6 +12,7 @@ function multilang_add_metabox() {
 	
 	$post_types = array('post', 'page');
 	foreach ($post_types as $post_type) {
+		// Add the Multilang Translations metabox to posts and pages
 		add_meta_box(
 			'multilang_metabox',
 			'Multilang Translations',

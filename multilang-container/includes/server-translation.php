@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Fallback: Load language data from file if cache-handler is not present
+// If cache-handler isn't available, load language data from file
 function load_language_data($lang) {
     $base_dir = dirname(__FILE__) . '/../languages/';
     $file = $base_dir . $lang . '.json';
@@ -62,7 +62,7 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
         }
     }
     
-    // Override current language if force_lang is provided
+    // Use force_lang if provided, otherwise use the current language
     $current_lang = $force_lang ?: $current_lang_cache;
     
     if ($translations === null) {
@@ -663,6 +663,8 @@ function multilang_start_page_buffer() {
     ob_start('multilang_process_entire_page');
 }
 add_action('template_redirect', 'multilang_start_page_buffer', 0);
+// add_action('wp', 'multilang_start_page_buffer', 999);
+
 
 function multilang_process_entire_page($html) {
 
@@ -753,7 +755,7 @@ function multilang_process_entire_page($html) {
                     $default_lang = get_multilang_default_language();
                     $current_lang_translations = multilang_get_language_data($current_lang);
                     $default_lang_translations = multilang_get_language_data($default_lang);
-                    multilang_wrap_text_nodes_dom($footer, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
+                    multilang_wrap_text_nodes($footer, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
                     $result_html = $dom->saveHTML();
                     $footer_translated = true;
                 }

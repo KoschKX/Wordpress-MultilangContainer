@@ -32,9 +32,16 @@ function multilang_render_languages_tab($active_tab, $lang_flags, $langs, $plugi
 	
 	// Default language dropdown and other settings
 	multilang_render_language_settings($lang_flags, $langs, $plugin_url);
+
+	// Close main section, then add button at bottom of form
+	echo '<div style="height:1px;"></div>';
 	
-	echo '<br /><input type="submit" class="button button-primary" value=" Save Languages" style="font-size:1.1em;padding:0.7em 2em;margin-top:1.5em;border-radius:0.5em;" />';
 	echo '</form>';
+
+	echo '<div style="margin-top:2.5em;text-align:center;">';
+		echo '<input type="submit" class="button button-primary" value=" Save Languages" style="font-size:1.1em;padding:0.7em 2em;border-radius:0.5em;" />';
+	echo '</div>';
+
 	echo '</div>';
 }
 
