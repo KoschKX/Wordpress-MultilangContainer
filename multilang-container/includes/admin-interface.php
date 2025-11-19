@@ -2,15 +2,15 @@
 /**
  * Multilang Container - Admin Interface
  * 
- * Manages the settings page, language setup, and admin UI
+ * Handles settings page, language configuration, and admin UI
  */
 
-// Don't allow direct access to this file
+// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// AJAX handler for saving language settings
+// AJAX handler for saving languages
 add_action('wp_ajax_save_languages_ajax', 'multilang_save_languages_ajax');
 function multilang_save_languages_ajax() {
 	// Check nonce
@@ -43,7 +43,9 @@ function multilang_save_languages_ajax() {
 	}
 }
 
-// Add the Multilang settings page to the admin menu
+/**
+ * Admin settings page for languages
+ */
 function multilang_container_admin_menu() {
 	add_options_page(
 		'Multilang Container Settings',
@@ -55,7 +57,9 @@ function multilang_container_admin_menu() {
 }
 add_action('admin_menu', 'multilang_container_admin_menu');
 
-// Main function for the settings page
+/**
+ * Main settings page function
+ */
 function multilang_container_settings_page() {
 	// Initialize variables
 	$translation_message = '';

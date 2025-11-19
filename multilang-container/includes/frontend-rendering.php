@@ -2,15 +2,17 @@
 /**
  * Multilang Container - Frontend Rendering
  * 
- * Manages how content is shown on live pages
+ * Handles frontend rendering functionality for live pages
  */
 
-// Don't allow direct access to this file
+// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Renders the multilang container block
+/**
+ * Render callback for multilang container block
+ */
 function multilang_container_render( $attributes ) {
 	$texts = isset( $attributes['texts'] ) ? $attributes['texts'] : array();
 	$langs = get_option('multilang_container_languages', array_keys($texts));
@@ -35,7 +37,9 @@ function multilang_container_render( $attributes ) {
 	return $output;
 }
 
-// Replace 'lang-xx' class with 'translate lang-xx' in block HTML
+/**
+ * Filter to replace 'lang-xx' class with 'translate lang-xx'
+ */
 add_filter('render_block', function($block_content, $block) {
     if ($block['blockName'] === 'multilang/container') {
         $block_content = preg_replace('/(<div[^>]*class=["\'][^"\']*)\s*lang-([a-z]{2})(\s*)/i', '$1translate', $block_content, 1);
@@ -43,7 +47,9 @@ add_filter('render_block', function($block_content, $block) {
     return $block_content;
 }, 10, 2);
 
-// Fill empty language blocks with the default language content
+/**
+ * Copy default language content to empty language blocks
+ */
 add_filter('the_content', function($content) {
     if (is_admin()) {
         return $content;

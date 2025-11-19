@@ -25,7 +25,6 @@ function multilang_get_formatted_excerpt($post_id = null) {
         $current_lang = $default_lang;
     }
     
-    // Build the excerpt HTML with language wrappers
     $formatted_excerpt = '<p class="multilang-wrapper">';
     $all_langs = array();
   

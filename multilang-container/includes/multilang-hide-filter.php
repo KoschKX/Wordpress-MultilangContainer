@@ -72,7 +72,9 @@ add_filter('the_content', 'multilang_hide_non_current_language', 999);
 add_filter('the_excerpt', 'multilang_hide_non_current_language', 999);
 add_filter('widget_text', 'multilang_hide_non_current_language', 999);
 
-// Add a class to the body tag when hide filtering is active
+/**
+ * Add body attribute for hide filtering
+ */
 function multilang_add_hide_filter_body_attribute($classes) {
     $classes[] = 'multilang-hide-filter-active';
     return $classes;

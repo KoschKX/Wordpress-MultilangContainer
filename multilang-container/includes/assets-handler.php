@@ -2,31 +2,34 @@
 /**
  * Multilang Container - Assets Handler
  * 
- * Manages CSS and JavaScript loading, asset management, and frontend resources
+ * Handles CSS and JavaScript enqueuing, asset management, and frontend resource loading
  */
 
-// Don't allow direct access to this file
+// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
 // require_once __DIR__ . '/cache-handler.php';
 
-// CSS solution: hide all languages by default, show only the one matching the body class. Now with caching!
+/**
+ * Pure CSS solution - hide all languages by default, show only the one with matching body class
+ * Now with caching support!
+ */
 function multilang_inject_immediate_css() {
-	// Skip loading if we're in the backend
+    // Don't load during backend operations
     if ( multilang_is_backend_operation() ) {
         return;
     }
-	// Only run if cache-handler functions are available
+    // Only run if cache-handler functions exist
     if (!function_exists('multilang_get_cached_inline_css') || !function_exists('multilang_get_cached_inline_js')) {
         return;
     }
-	// Get cached CSS and JS, or generate them if needed
+    // Get cached CSS and JS or generate them
     $css = multilang_get_cached_inline_css();
     $js = multilang_get_cached_inline_js();
     
-	// Add CSS and JS inline using WordPress functions
+    // Use wp_add_inline_style and wp_add_inline_script
     wp_register_style('multilang-immediate-css', false);
     wp_enqueue_style('multilang-immediate-css');
     wp_add_inline_style('multilang-immediate-css', $css);
@@ -37,16 +40,18 @@ function multilang_inject_immediate_css() {
 }
 add_action( 'wp_enqueue_scripts', 'multilang_inject_immediate_css', 0 );
 
-// Load CSS for the frontend and block editor
+/**
+ * Enqueue CSS for frontend and block editor
+ */
 
 function multilang_container_enqueue_styles() {
 	$css_path = get_switchcss_file_path();
 	$css_url = '';
-	// Change absolute path to a URI
+	// Convert absolute path to URI
 	if (strpos($css_path, ABSPATH) === 0) {
 		$css_url = site_url(str_replace(ABSPATH, '', $css_path));
 	} else {
-		// If not in the plugin dir, use plugins_url as a fallback
+		// fallback: use plugins_url if in plugin dir
 		$css_url = plugins_url('css/multilang-container.css', dirname(__FILE__));
 	}
 	wp_enqueue_style(
@@ -56,7 +61,7 @@ function multilang_container_enqueue_styles() {
 		filemtime($css_path)
 	);
 	
-	// Load CSS for excerpts
+	// Enqueue excerpts CSS
 	$excerpts_css_path = plugin_dir_path(dirname(__FILE__)) . 'css/multilang-excerpts.css';
 	if (file_exists($excerpts_css_path)) {
 		$excerpts_css_url = plugins_url('css/multilang-excerpts.css', dirname(__FILE__));
@@ -71,7 +76,9 @@ function multilang_container_enqueue_styles() {
 add_action('wp_enqueue_scripts', 'multilang_container_enqueue_styles', 0);
 add_action('enqueue_block_editor_assets', 'multilang_container_enqueue_styles', 0);
 
-// Load multilang-container.js on the frontend
+/**
+ * Enqueue multilang-container.js on the frontend
+ */
 function multilang_container_enqueue_scripts() {
     // Don't load during backend operations
     if ( multilang_is_backend_operation() ) {

@@ -2,15 +2,17 @@
 /**
  * Multilang Container - Admin Bar Menu
  * 
- * Adds cache management shortcuts to the WordPress admin bar
+ * Adds quick cache management options to the WordPress admin bar
  */
 
-// Don't allow direct access to this file
+// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Add the Multilang menu to the admin bar
+/**
+ * Add Multilang menu to admin bar
+ */
 function multilang_add_admin_bar_menu($wp_admin_bar) {
     if (!current_user_can('manage_options')) {
         return;
