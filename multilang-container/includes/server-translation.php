@@ -23,7 +23,6 @@ function load_language_data($lang) {
             return $data;
         }
     }
-    error_log('[multilang] load_language_data: No file or invalid JSON for ' . $lang . ' at ' . $file);
     return array();
 }
 
@@ -36,17 +35,14 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
     $call_count++;
     
     if ( multilang_is_backend_operation() ) {
-        error_log('[multilang] Backend operation, skipping translation.');
         return $content;
     }
 
     if ( empty($content) || strlen(trim($content)) < 10 ) {
-        error_log('[multilang] Content too short, skipping translation.');
         return $content;
     }
 
     if ( strpos($content, '<') === false || strlen($content) < 100 ) {
-        error_log('[multilang] Content not HTML or too short, skipping translation.');
         return $content;
     }
     
@@ -87,7 +83,6 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
 
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
     if (empty($translations) || strlen($html) < 100) {
-        error_log('[multilang] No translations or HTML too short.');
         return $html;
     }
     
@@ -104,7 +99,6 @@ function multilang_process_text_for_translations($html, $translations, $current_
     $default_lang_translations = $lang_cache[$default_lang];
 
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
-        error_log('[multilang] No translation data for current or default language: ' . $current_lang . ', ' . $default_lang);
         return $html;
     }
     
@@ -120,14 +114,12 @@ function multilang_process_text_for_translations($html, $translations, $current_
     
     $body = $dom->getElementsByTagName('body')->item(0);
     if (!$body) {
-        error_log('[multilang] No <body> found in HTML.');
         return $html;
     }
 
     $replacements_made = multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
 
     if ($replacements_made === 0) {
-        error_log('[multilang] No replacements made in content.');
         return $html;
     }
     
@@ -142,22 +134,18 @@ function multilang_get_language_data($lang) {
     // Use cached version if available, otherwise load directly
     if (function_exists('multilang_get_cached_language_data')) {
         $data = multilang_get_cached_language_data($lang);
-        // error_log('[multilang] Using cached language data for ' . $lang . ': ' . (is_array($data) ? count($data) : 'not array'));
         return $data;
     }
     // Fallback: load language data directly
     if (function_exists('load_language_data')) {
         $data = load_language_data($lang);
-        // error_log('[multilang] Using direct loaded language data for ' . $lang . ': ' . (is_array($data) ? count($data) : 'not array'));
         return $data;
     }
     // Try global translations if available
     global $multilang_translations;
     if (isset($multilang_translations[$lang])) {
-        error_log('[multilang] Using global $multilang_translations for ' . $lang . ': ' . (is_array($multilang_translations[$lang]) ? count($multilang_translations[$lang]) : 'not array'));
         return $multilang_translations[$lang];
     }
-    error_log('[multilang] No language data found for ' . $lang);
     return array();
 }
 
@@ -289,12 +277,9 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
         // Use cached structure data if available, otherwise load directly
         if (function_exists('multilang_get_cached_structure_data')) {
             $structure_data = multilang_get_cached_structure_data();
-            // error_log('[multilang] Using cached structure data: ' . (is_array($structure_data) ? count($structure_data) : 'not array'));
         } else if (function_exists('load_structure_data')) {
             $structure_data = load_structure_data();
-            // error_log('[multilang] Using direct loaded structure data: ' . (is_array($structure_data) ? count($structure_data) : 'not array'));
         } else {
-            // error_log('[multilang] No structure data found');
             $structure_data = false;
         }
     }
@@ -696,20 +681,17 @@ function multilang_process_entire_page($html) {
     $current_lang = multilang_get_current_language();
     global $post;
     $post_id = null;
-    // error_log('[POST ID DEBUG] $post->ID=' . (isset($post) ? var_export($post->ID, true) : 'unset'));
     if (isset($post) && !empty($post->ID)) {
         $post_id = $post->ID;
     }
     if (!$post_id && function_exists('get_the_ID')) {
         $the_id = get_the_ID();
-        // error_log('[POST ID DEBUG] get_the_ID()=' . var_export($the_id, true));
         if ($the_id) {
             $post_id = $the_id;
         }
     }
     if (!$post_id && function_exists('get_queried_object_id')) {
         $query_id = get_queried_object_id();
-        // error_log('[POST ID DEBUG] get_queried_object_id()=' . var_export($query_id, true));
         if ($query_id) {
             $post_id = $query_id;
         }
@@ -733,17 +715,14 @@ function multilang_process_entire_page($html) {
     }
 
     // For each section/selector, try to get cached fragment
-    // error_log('[FRAGMENT RETRIEVAL] post_id=' . var_export($post_id, true) . ', current_lang=' . var_export($current_lang, true));
     list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
 
     // If all fragments are found, inject them and bypass heavy work
-    // error_log('Fragment injection block check: all_found=' . ($all_found ? 'true' : 'false'));
-    // error_log('Fragment injection block check: fragments=' . print_r($fragments, true));
     if (!empty($fragments)) {
         $result_html = multilang_inject_fragments_into_html($html, $fragments);
         return $result_html;
     } else {
-       // error_log('Fragment injection block skipped: no fragments found');
+       // Fragment injection block skipped: no fragments found
     }
 
     // Otherwise, process the HTML and cache fragments
