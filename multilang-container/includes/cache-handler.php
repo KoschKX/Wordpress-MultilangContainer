@@ -548,7 +548,7 @@ function multilang_clear_post_cache($post_id) {
     }
     
     if ($deleted_count > 0 && multilang_is_cache_debug_logging_enabled()) {
-        error_log('[Multilang Cache] Cleared cache for post ' . $post_id . ' (' . $deleted_count . ' files)');
+        // error_log('[Multilang Cache] Cleared cache for post ' . $post_id . ' (' . $deleted_count . ' files)');
     }
     
     return $deleted_count;
@@ -930,26 +930,27 @@ function multilang_inject_fragments_into_html($html, $fragments) {
     $xpath = new DOMXPath($dom);
     $any_injected = false;
         foreach ($fragments as $selector => $selector_fragments) {
+            // Run translation logic on each fragment after cache retrieval
+            if (function_exists('multilang_server_side_translate')) {
+                $selector_fragments = array_map('multilang_server_side_translate', $selector_fragments);
+            }
+            // Optionally filter to current language (if needed)
             if (function_exists('multilang_filter_fragment_to_current_language')) {
                 $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
             }
-            // Use regex for all selectors in the array
+            // ...existing code for regex and DOM injection...
             $tag = strtolower($selector);
             $regex = '';
             if ($tag === 'body' || $tag === 'html') {
-                // Never inject body or html
                 continue;
             } else if (preg_match('/^[a-z0-9_-]+$/', $tag)) {
-                // Tag selector (e.g., footer, form, header)
                 $regex = '/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is';
             } else if (strpos($tag, '.') === 0) {
-                // Class selector (e.g., .myclass)
                 $class = preg_quote(substr($tag, 1), '/');
-                $regex = '/<([a-z0-9]+)[^>]*class=["\'][^>]*\b' . $class . '\b[^>]*["\'][^>]*>(.*?)<\/\1>/is';
+                $regex = '/<([a-z0-9]+)[^>]*class=["\'][^>]*\b' . $class . '\b[^>]*["\'][^>]*>(.*?)<\/1>/is';
             } else if (strpos($tag, '#') === 0) {
-                // ID selector (e.g., #myid)
                 $id = preg_quote(substr($tag, 1), '/');
-                $regex = '/<([a-z0-9]+)[^>]*id=["\']' . $id . '["\'][^>]*>(.*?)<\/\1>/is';
+                $regex = '/<([a-z0-9]+)[^>]*id=["\']' . $id . '["\'][^>]*>(.*?)<\/1>/is';
             }
             if ($regex && preg_match($regex, $html)) {
                 foreach ($selector_fragments as $fragment_html) {
@@ -960,13 +961,12 @@ function multilang_inject_fragments_into_html($html, $fragments) {
                     $html = preg_replace($regex, $fragment_html, $html, 1, $count);
                     if ($count > 0) {
                         $any_injected = true;
-                        error_log('[Multilang Debug] Regex injection for selector ' . $selector . ' result (first 1000 chars): ' . substr($html, 0, 1000));
+                        // error_log('[Multilang Debug] Regex injection for selector ' . $selector . ' result (first 1000 chars): ' . substr($html, 0, 1000));
                         break;
                     }
                 }
                 continue;
             }
-            // Fallback to DOMDocument for other selectors
             $xp = multilang_css_to_xpath($selector);
             if ($xp) {
                 $nodes = $xpath->query($xp);
@@ -1047,7 +1047,7 @@ function multilang_cache_fragments_from_html($processed_html, $cache_page_key, $
                     multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
                 }
                 if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
-                    error_log('[Multilang Cache] Regex fragment extraction for selector ' . $normalized_selector . ' found ' . count($matches[0]) . ' matches.');
+                    // error_log('[Multilang Cache] Regex fragment extraction for selector ' . $normalized_selector . ' found ' . count($matches[0]) . ' matches.');
                 }
             }
             // Fallback to DOMDocument/XPath if regex fails
@@ -1072,7 +1072,7 @@ function multilang_cache_fragments_from_html($processed_html, $cache_page_key, $
                         $index++;
                     }
                     if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
-                        error_log('[Multilang Cache] DOM fallback fragment extraction for selector ' . $normalized_selector . ' found ' . $index . ' matches.');
+                        // error_log('[Multilang Cache] DOM fallback fragment extraction for selector ' . $normalized_selector . ' found ' . $index . ' matches.');
                     }
                 }
             }

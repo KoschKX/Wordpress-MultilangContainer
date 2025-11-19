@@ -596,6 +596,28 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
     return $replacements_made;
 }
 
+function multilang_wrap_text_nodes_regex($html, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
+    // Tags to skip
+    $skip_tags = '(script|style|code|pre|blockquote)';
+    // Regex to match text nodes not inside skip tags
+    $pattern = '/(<(?!' . $skip_tags . ')[a-zA-Z0-9]+[^>]*>)([^<]+)(<\/(?!' . $skip_tags . ')[a-zA-Z0-9]+>)/i';
+
+    $callback = function($matches) use ($current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
+        $original_text = $matches[2];
+        if (empty(trim($original_text))) return $matches[0];
+
+        $translated = multilang_translate_text($original_text, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
+        if ($translated !== $original_text && strpos($translated, 'class="translate lang-') !== false) {
+            $wrapper_html = '<span class="multilang-wrapper" data-original-text="' . esc_attr(trim($original_text)) . '">' . $translated . '</span>';
+            return $matches[1] . $wrapper_html . $matches[3];
+        }
+        return $matches[0];
+    };
+
+    $result = preg_replace_callback($pattern, $callback, $html);
+    return $result;
+}
+
 // Page translation - buffers output and processes entire HTML
 static $multilang_translation_cache = null;
 
@@ -688,6 +710,7 @@ function multilang_process_entire_page($html) {
 
     // Get structure data and selectors
     $structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
+    $force_footer_translation = true;
     if (!$structure_data || !is_array($structure_data)) {
         // Fallback: process whole page
         return multilang_server_side_translate($html);
@@ -701,6 +724,7 @@ function multilang_process_entire_page($html) {
         return multilang_server_side_translate($html);
     }
 
+    $footer_translated = false;
     if (function_exists('multilang_inject_fragments_into_html')) {
         // For each section/selector, try to get cached fragment
         list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
@@ -708,9 +732,33 @@ function multilang_process_entire_page($html) {
         // If all fragments are found, inject them and bypass heavy work
         if (!empty($fragments)) {
             $result_html = multilang_inject_fragments_into_html($html, $fragments);
+            // If result is blank, empty, or missing key content, fallback to full translation
+            $is_empty = empty(trim(strip_tags($result_html))) || strlen(trim($result_html)) < 100;
+            $missing_body = (strpos($result_html, '<body') === false);
+            if ($is_empty || $missing_body) {
+                // Fallback: process whole page
+                $result_html = multilang_server_side_translate($html);
+            }
+            // Check if footer is present and translated
+            if ($force_footer_translation && strpos($result_html, 'class="multilang-wrapper"') === false && strpos($result_html, '<footer') !== false) {
+                // Fallback: process footer element directly
+                $dom = new DOMDocument();
+                $dom->encoding = 'UTF-8';
+                libxml_use_internal_errors(true);
+                $dom->loadHTML('<?xml encoding="UTF-8">' . $result_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                libxml_clear_errors();
+                $footer = $dom->getElementsByTagName('footer')->item(0);
+                if ($footer) {
+                    $current_lang = multilang_get_current_language();
+                    $default_lang = get_multilang_default_language();
+                    $current_lang_translations = multilang_get_language_data($current_lang);
+                    $default_lang_translations = multilang_get_language_data($default_lang);
+                    multilang_wrap_text_nodes_dom($footer, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
+                    $result_html = $dom->saveHTML();
+                    $footer_translated = true;
+                }
+            }
             return $result_html;
-        } else {
-        // Fragment injection block skipped: no fragments found
         }
     }
 
