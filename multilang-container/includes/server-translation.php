@@ -600,14 +600,6 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
 static $multilang_translation_cache = null;
 
 function multilang_start_page_buffer() {
-
-    // Skip if page is excluded from translation
-    if (function_exists('multilang_is_page_excluded_from_cache') && multilang_is_page_excluded_from_cache()) {
-        return;
-    }
-    if (function_exists('multilang_is_cache_enabled') && !multilang_is_cache_enabled()) {
-        return;
-    }
     
     if ( multilang_is_backend_operation() ) {
         return;
@@ -654,13 +646,6 @@ function multilang_process_entire_page($html) {
         return $html;
     }
 
-    if (function_exists('multilang_is_page_excluded_from_cache') && multilang_is_page_excluded_from_cache()) {
-        return $html;
-    }
-    if (function_exists('multilang_is_cache_enabled') && !multilang_is_cache_enabled()) {
-        return $html;
-    }
-    
     if ( defined('DOING_AJAX') && DOING_AJAX ) {
         return $html;
     }
@@ -714,15 +699,17 @@ function multilang_process_entire_page($html) {
         return multilang_server_side_translate($html);
     }
 
-    // For each section/selector, try to get cached fragment
-    list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
+    if (function_exists('multilang_inject_fragments_into_html')) {
+        // For each section/selector, try to get cached fragment
+        list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
 
-    // If all fragments are found, inject them and bypass heavy work
-    if (!empty($fragments)) {
-        $result_html = multilang_inject_fragments_into_html($html, $fragments);
-        return $result_html;
-    } else {
-       // Fragment injection block skipped: no fragments found
+        // If all fragments are found, inject them and bypass heavy work
+        if (!empty($fragments)) {
+            $result_html = multilang_inject_fragments_into_html($html, $fragments);
+            return $result_html;
+        } else {
+        // Fragment injection block skipped: no fragments found
+        }
     }
 
     // Otherwise, process the HTML and cache fragments

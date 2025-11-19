@@ -35,7 +35,6 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
     }
     // Cache the full HTML of the selected element, with all language spans present
     $data[$selector] = $fragment;
-    // error_log('[CACHE SET] file=' . $file . ' key=' . $cache_key . ' selector=' . $selector . ' value_length=' . strlen($fragment));
     file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     return true;
 }
@@ -43,13 +42,11 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
 function multilang_get_fragment_cache($cache_key, $selector) {
     $file = multilang_get_fragment_cache_file($cache_key);
     if (!file_exists($file)) {
-        // error_log('[CACHE GET] file=' . $file . ' key=' . $cache_key . ' selector=' . $selector . ' result=MISS');
         return false;
     }
     $content = file_get_contents($file);
     $data = json_decode($content, true);
     if (!is_array($data) || !isset($data[$selector])) {
-        // error_log('[CACHE GET] file=' . $file . ' key=' . $cache_key . ' selector=' . $selector . ' result=MISS');
         return false;
     }
     return $data[$selector];
@@ -928,40 +925,51 @@ function multilang_retrieve_cached_fragments($cache_page_key, $structure_data) {
  * Inject cached fragments into HTML
  */
 function multilang_inject_fragments_into_html($html, $fragments) {
-    // Inject any fragments that are found
+    if (empty($fragments) || !is_array($fragments)) {
+        return $html;
+    }
     $dom = new DOMDocument();
     libxml_use_internal_errors(true);
     $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
     libxml_clear_errors();
     $xpath = new DOMXPath($dom);
+
     foreach ($fragments as $selector => $selector_fragments) {
-        // Filter fragment so only current language span has innerHTML
         if (function_exists('multilang_filter_fragment_to_current_language')) {
             $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
         }
         $xp = multilang_css_to_xpath($selector);
         if ($xp) {
             $nodes = $xpath->query($xp);
+            if ($nodes->length === 0) {
+                continue;
+            }
             $fragment_index = 0;
             foreach ($nodes as $node) {
                 if (isset($selector_fragments[$fragment_index])) {
                     $fragment_html = $selector_fragments[$fragment_index];
-                    
-                    // Parse the cached fragment
+                    // Prevent replacing <body> unless fragment contains <body> and <head>
+                    if (strtolower($selector) === 'body') {
+                        if (stripos($fragment_html, '<body') === false || stripos($fragment_html, '<head') === false) {
+                            $fragment_index++;
+                            continue;
+                        }
+                    }
                     $fragment_dom = new DOMDocument();
                     libxml_use_internal_errors(true);
                     $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                     libxml_clear_errors();
-                    
-                    // Replace the entire node with the fragment's root element
                     $fragment_root = $fragment_dom->documentElement;
                     if ($fragment_root) {
                         $imported_fragment = $dom->importNode($fragment_root, true);
                         $node->parentNode->replaceChild($imported_fragment, $node);
+                    } else {
                     }
+                } else {
                 }
                 $fragment_index++;
             }
+        } else {
         }
     }
     $result_html = $dom->saveHTML();
