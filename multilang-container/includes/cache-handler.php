@@ -402,11 +402,6 @@ function multilang_get_cached_language_data($lang) {
 function multilang_get_page_cache_key() {
     global $post;
     
-    // Don't cache excluded pages
-    if (multilang_is_page_excluded_from_cache()) {
-        return false;
-    }
-    
     // Don't cache AJAX requests unless explicitly enabled
     if (wp_doing_ajax() && !multilang_is_ajax_cache_enabled()) {
         return false;
@@ -933,44 +928,77 @@ function multilang_inject_fragments_into_html($html, $fragments) {
     $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
     libxml_clear_errors();
     $xpath = new DOMXPath($dom);
-
-    foreach ($fragments as $selector => $selector_fragments) {
-        if (function_exists('multilang_filter_fragment_to_current_language')) {
-            $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
-        }
-        $xp = multilang_css_to_xpath($selector);
-        if ($xp) {
-            $nodes = $xpath->query($xp);
-            if ($nodes->length === 0) {
+    $any_injected = false;
+        foreach ($fragments as $selector => $selector_fragments) {
+            if (function_exists('multilang_filter_fragment_to_current_language')) {
+                $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
+            }
+            // Use regex for all selectors in the array
+            $tag = strtolower($selector);
+            $regex = '';
+            if ($tag === 'body' || $tag === 'html') {
+                // Never inject body or html
+                continue;
+            } else if (preg_match('/^[a-z0-9_-]+$/', $tag)) {
+                // Tag selector (e.g., footer, form, header)
+                $regex = '/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is';
+            } else if (strpos($tag, '.') === 0) {
+                // Class selector (e.g., .myclass)
+                $class = preg_quote(substr($tag, 1), '/');
+                $regex = '/<([a-z0-9]+)[^>]*class=["\'][^>]*\b' . $class . '\b[^>]*["\'][^>]*>(.*?)<\/\1>/is';
+            } else if (strpos($tag, '#') === 0) {
+                // ID selector (e.g., #myid)
+                $id = preg_quote(substr($tag, 1), '/');
+                $regex = '/<([a-z0-9]+)[^>]*id=["\']' . $id . '["\'][^>]*>(.*?)<\/\1>/is';
+            }
+            if ($regex && preg_match($regex, $html)) {
+                foreach ($selector_fragments as $fragment_html) {
+                    $fragment_html = preg_replace('/<\?xml[^>]+\?>/i', '', $fragment_html);
+                    $frag_len = strlen(trim($fragment_html));
+                    if ($frag_len === 0) continue;
+                    $old_html = $html;
+                    $html = preg_replace($regex, $fragment_html, $html, 1, $count);
+                    if ($count > 0) {
+                        $any_injected = true;
+                        error_log('[Multilang Debug] Regex injection for selector ' . $selector . ' result (first 1000 chars): ' . substr($html, 0, 1000));
+                        break;
+                    }
+                }
                 continue;
             }
-            $fragment_index = 0;
-            foreach ($nodes as $node) {
-                if (isset($selector_fragments[$fragment_index])) {
-                    $fragment_html = $selector_fragments[$fragment_index];
-                    // Prevent replacing <body> unless fragment contains <body> and <head>
-                    if (strtolower($selector) === 'body') {
-                        if (stripos($fragment_html, '<body') === false || stripos($fragment_html, '<head') === false) {
+            // Fallback to DOMDocument for other selectors
+            $xp = multilang_css_to_xpath($selector);
+            if ($xp) {
+                $nodes = $xpath->query($xp);
+                if ($nodes->length === 0) {
+                    continue;
+                }
+                $fragment_index = 0;
+                foreach ($nodes as $node) {
+                    if (isset($selector_fragments[$fragment_index])) {
+                        $fragment_html = $selector_fragments[$fragment_index];
+                        $frag_len = strlen(trim($fragment_html));
+                        if ($frag_len === 0) {
                             $fragment_index++;
                             continue;
                         }
+                        $fragment_dom = new DOMDocument();
+                        libxml_use_internal_errors(true);
+                        $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                        libxml_clear_errors();
+                        $fragment_root = $fragment_dom->documentElement;
+                        if ($fragment_root) {
+                            $imported_fragment = $dom->importNode($fragment_root, true);
+                            $node->parentNode->replaceChild($imported_fragment, $node);
+                            $any_injected = true;
+                        }
                     }
-                    $fragment_dom = new DOMDocument();
-                    libxml_use_internal_errors(true);
-                    $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                    libxml_clear_errors();
-                    $fragment_root = $fragment_dom->documentElement;
-                    if ($fragment_root) {
-                        $imported_fragment = $dom->importNode($fragment_root, true);
-                        $node->parentNode->replaceChild($imported_fragment, $node);
-                    } else {
-                    }
-                } else {
+                    $fragment_index++;
                 }
-                $fragment_index++;
             }
-        } else {
         }
+    if (!$any_injected) {
+        return $html;
     }
     $result_html = $dom->saveHTML();
     return $result_html;
@@ -980,51 +1008,72 @@ function multilang_inject_fragments_into_html($html, $fragments) {
  * Cache fragments from processed HTML
  */
 function multilang_cache_fragments_from_html($processed_html, $cache_page_key, $structure_data) {
-    // Extract and cache fragments from the processed HTML
-    $processed_dom = new DOMDocument();
-    libxml_use_internal_errors(true);
-    $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    libxml_clear_errors();
-    $processed_xpath = new DOMXPath($processed_dom);
-    
+    // Extract and cache fragments from the processed HTML using regex for reliability
     foreach ($structure_data as $section => $config) {
         if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
         foreach ($config['_selectors'] as $selector) {
             $normalized_selector = trim($selector);
-            $xp = multilang_css_to_xpath($normalized_selector);
-            if ($xp) {
-                $nodes = $processed_xpath->query($xp);
-                $index = 0;
-                foreach ($nodes as $node) {
-                    // Add multilang-cached class to the node before saving (only if not already present)
-                    $existing_class = $node->getAttribute('class');
-                    if (strpos($existing_class, 'multilang-cached') === false) {
-                        $new_class = trim($existing_class . ' multilang-cached');
-                        $node->setAttribute('class', $new_class);
-                    }
-                    
-                    // Set visibility styles on language spans
-                    $current_lang = multilang_get_current_language();
-                    $available_langs = get_multilang_available_languages();
-                    $span_nodes = $processed_xpath->query('.//span[contains(@class, "translate") and contains(@class, "lang-")]', $node);
-                    foreach ($span_nodes as $span) {
-                        $span_classes = $span->getAttribute('class');
-                        $lang_class = null;
-                        foreach ($available_langs as $lang) {
-                            if (strpos($span_classes, 'lang-' . $lang) !== false) {
-                                $lang_class = $lang;
-                                break;
-                            }
+            $tag = strtolower($normalized_selector);
+            $regex = '';
+            if ($tag === 'body' || $tag === 'html') {
+                // Never cache body or html
+                continue;
+            } else if (preg_match('/^[a-z0-9_-]+$/', $tag)) {
+                // Tag selector (e.g., footer, form, header)
+                $regex = '/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is';
+            } else if (strpos($tag, '.') === 0) {
+                // Class selector (e.g., .myclass)
+                $class = preg_quote(substr($tag, 1), '/');
+                $regex = '/<([a-z0-9]+)[^>]*class=["\'][^>]*\b' . $class . '\b[^>]*["\'][^>]*>(.*?)<\/\1>/is';
+            } else if (strpos($tag, '#') === 0) {
+                // ID selector (e.g., #myid)
+                $id = preg_quote(substr($tag, 1), '/');
+                $regex = '/<([a-z0-9]+)[^>]*id=["\']' . $id . '["\'][^>]*>(.*?)<\/\1>/is';
+            }
+            $matches = array();
+            $found = false;
+            if ($regex && preg_match_all($regex, $processed_html, $matches)) {
+                $found = true;
+                foreach ($matches[0] as $index => $fragment_html) {
+                    // Add multilang-cached class if not present
+                    if (preg_match('/class=["\']([^"\']*)["\']/', $fragment_html, $class_match)) {
+                        if (strpos($class_match[1], 'multilang-cached') === false) {
+                            $fragment_html = preg_replace('/class=["\']([^"\']*)["\']/', 'class="' . trim($class_match[1] . ' multilang-cached') . '"', $fragment_html, 1);
                         }
-                        if ($lang_class) {
-                            //$visibility = ($lang_class === $current_lang) ? 'visible' : 'hidden';
-                            //$span->setAttribute('style', 'visibility: ' . $visibility . ' !important;');
-                        }
+                    } else {
+                        // Add class if missing
+                        $fragment_html = preg_replace('/^<([a-z0-9]+)/i', '<$1 class="multilang-cached"', $fragment_html, 1);
                     }
-                    
-                    $fragment_html = $processed_dom->saveHTML($node);
                     multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
-                    $index++;
+                }
+                if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
+                    error_log('[Multilang Cache] Regex fragment extraction for selector ' . $normalized_selector . ' found ' . count($matches[0]) . ' matches.');
+                }
+            }
+            // Fallback to DOMDocument/XPath if regex fails
+            if (!$found) {
+                $processed_dom = new DOMDocument();
+                libxml_use_internal_errors(true);
+                $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                libxml_clear_errors();
+                $processed_xpath = new DOMXPath($processed_dom);
+                $xp = multilang_css_to_xpath($normalized_selector);
+                if ($xp) {
+                    $nodes = $processed_xpath->query($xp);
+                    $index = 0;
+                    foreach ($nodes as $node) {
+                        $existing_class = $node->getAttribute('class');
+                        if (strpos($existing_class, 'multilang-cached') === false) {
+                            $new_class = trim($existing_class . ' multilang-cached');
+                            $node->setAttribute('class', $new_class);
+                        }
+                        $fragment_html = $processed_dom->saveHTML($node);
+                        multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
+                        $index++;
+                    }
+                    if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
+                        error_log('[Multilang Cache] DOM fallback fragment extraction for selector ' . $normalized_selector . ' found ' . $index . ' matches.');
+                    }
                 }
             }
         }

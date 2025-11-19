@@ -600,11 +600,12 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
 static $multilang_translation_cache = null;
 
 function multilang_start_page_buffer() {
-    
+    if (is_admin()) {
+        return;
+    }
     if ( multilang_is_backend_operation() ) {
         return;
     }
-
     // Don't buffer AJAX - check multiple ways
     if ( defined('DOING_AJAX') && DOING_AJAX ) {
         return;
@@ -636,6 +637,7 @@ function multilang_start_page_buffer() {
     if (!$has_server_sections) {
         return;
     }
+
     ob_start('multilang_process_entire_page');
 }
 add_action('template_redirect', 'multilang_start_page_buffer', 0);
