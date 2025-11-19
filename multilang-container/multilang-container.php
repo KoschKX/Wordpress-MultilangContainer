@@ -24,17 +24,21 @@ if (defined('DOING_AJAX') && DOING_AJAX) {
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
+
 //require_once plugin_dir_path(__FILE__) . 'includes/admin-bar-menu.php';
+
 require_once plugin_dir_path(__FILE__) . 'includes/language-switcher.php';
 require_once plugin_dir_path(__FILE__) . 'includes/assets-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/server-translation.php';
 require_once plugin_dir_path(__FILE__) . 'includes/frontend-rendering.php';
 require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
 require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
+
 require_once plugin_dir_path(__FILE__) . 'admin/tab-language-settings.php';
 require_once plugin_dir_path(__FILE__) . 'admin/tab-options.php';
 require_once plugin_dir_path(__FILE__) . 'admin/utilities-admin.php';
 require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
+
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-seo.php';
@@ -44,9 +48,10 @@ require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 // Run at priority 999 to ensure it runs AFTER WP Fastest Cache (which runs at priority 10)
 add_action('init', function() {
     if (wp_doing_ajax()) {
-        if (!function_exists('multilang_is_ajax_cache_enabled')) {
-            require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
-        }
+        // if (!function_exists('multilang_is_ajax_cache_enabled')) {
+            // require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
+        //}
+        
         
         if (!multilang_is_ajax_cache_enabled()) {
             // error_log('[Multilang] AJAX detected - preventing cache for action: ' . ($_REQUEST['action'] ?? 'unknown'));
@@ -105,8 +110,6 @@ add_filter('wpfc_toolbar_exclude_ajax', function($actions) {
     $actions[] = 'get_fusion_blog';
     return $actions;
 }, 1, 1);
-
-require_once plugin_dir_path(__FILE__) . 'demo-usage.php';
 
 add_action('wp_ajax_multilang_save_languages_json', function() {
     if (!current_user_can('manage_options')) {

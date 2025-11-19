@@ -13,61 +13,9 @@ function multilang_is_cache_debug_logging_enabled() {
     return false;
 }
 
-function multilang_is_ajax_cache_enabled() {
-    $json_options = multilang_get_cache_options();
-    if (isset($json_options['cache_ajax_requests'])) {
-        return (bool) $json_options['cache_ajax_requests'];
-    }
-    return false;
-}
 
-function multilang_is_page_excluded_from_cache() {
-    $json_options = multilang_get_cache_options();
-    $options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
-    if (empty($options)) {
-        return false;
-    }
-    // Get current page path
-    $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-    // Parse comma-separated list
-    $excluded_pages = array_map('trim', explode(',', $options));
-    foreach ($excluded_pages as $excluded) {
-        if (empty($excluded)) {
-            continue;
-        }
-        // Remove leading/trailing slashes for comparison
-        $excluded = trim($excluded, '/');
-        $current = trim($current_path, '/');
-        // Check if current path matches or starts with excluded path
-        if ($current === $excluded || strpos($current, $excluded) === 0) {
-            return true;
-        }
-    }
-    return false;
-}
 
-function multilang_is_cache_enabled() {
-    $json_options = multilang_get_cache_options();
-    if (isset($json_options['cache_enabled'])) {
-        return (bool) $json_options['cache_enabled'];
-    }
-    return true;
-}
-/**
- * Get cache options from JSON file
- */
-function multilang_get_cache_options() {
-    $upload_dir = wp_upload_dir();
-    $options_file = trailingslashit($upload_dir['basedir']) . 'multilang/cache-options.json';
-    if (file_exists($options_file)) {
-        $content = file_get_contents($options_file);
-        $options = json_decode($content, true);
-        if (is_array($options)) {
-            return $options;
-        }
-    }
-    return array();
-}
+
 /**
  * Fragment-based JSON caching for selector fragments
  */
@@ -305,38 +253,10 @@ function multilang_get_cached_inline_css() {
     $current_lang = multilang_get_current_language();
     
     $css = '
-    /* Hide all languages by default */
-    .translate .lang-en,
-    .translate .lang-de,
-    .translate .lang-fr,
-    .translate .lang-es,
-    .translate .lang-it,
-    .translate .lang-pt,
-    .translate .lang-nl,
-    .translate .lang-pl,
-    .translate .lang-ru,
-    .translate .lang-zh,
-    .translate .lang-ja,
-    .translate .lang-ko,
-    .wp-block-multilang-container .lang-en,
-    .wp-block-multilang-container .lang-de,
-    .wp-block-multilang-container .lang-fr,
-    .wp-block-multilang-container .lang-es,
-    .wp-block-multilang-container .lang-it,
-    .wp-block-multilang-container .lang-pt,
-    .wp-block-multilang-container .lang-nl,
-    .wp-block-multilang-container .lang-pl,
-    .wp-block-multilang-container .lang-ru,
-    .wp-block-multilang-container .lang-zh,
-    .wp-block-multilang-container .lang-ja,
-    .wp-block-multilang-container .lang-ko {
-        display: none !important;
-    }
-
-    /* Show current language */
+    /* Show current language when data-lang is set */
     html[data-lang="' . esc_attr($current_lang) . '"] .translate .lang-' . esc_attr($current_lang) . ',
     html[data-lang="' . esc_attr($current_lang) . '"] .wp-block-multilang-container .lang-' . esc_attr($current_lang) . ' {
-        display: block !important;
+        visibility: visible !important;
     }';
     
     multilang_set_cache($cache_key, $css);
@@ -388,12 +308,8 @@ function multilang_get_cached_inline_js() {
         // Update CSS rules
         var style = document.getElementById("multilang-immediate-css");
         if (style) {
-            var newCSS = "/* Hide all languages */ " +
-                ".translate .lang-en, .translate .lang-de, .translate .lang-fr, .translate .lang-es, .translate .lang-it, .translate .lang-pt, .translate .lang-nl, .translate .lang-pl, .translate .lang-ru, .translate .lang-zh, .translate .lang-ja, .translate .lang-ko, " +
-                ".wp-block-multilang-container .lang-en, .wp-block-multilang-container .lang-de, .wp-block-multilang-container .lang-fr, .wp-block-multilang-container .lang-es, .wp-block-multilang-container .lang-it, .wp-block-multilang-container .lang-pt, .wp-block_multilang-container .lang-nl, .wp-block-multilang-container .lang-pl, .wp-block-multilang-container .lang-ru, .wp-block-multilang-container .lang-zh, .wp-block-multilang-container .lang-ja, .wp-block-multilang-container .lang-ko " +
-                "{ display: none !important; } " +
-                "/* Show selected language */ " +
-                "html[data-lang=\"" + savedLang + "\"] .translate .lang-" + savedLang + ", html[data-lang=\"" + savedLang + "\"] .wp-block-multilang-container .lang-" + savedLang + " { display: block !important; }";
+            var newCSS = "/* Show selected language */ " +
+                "html[data-lang=\"" + savedLang + "\"] .translate .lang-" + savedLang + ", html[data-lang=\"" + savedLang + "\"] .wp-block-multilang-container .lang-" + savedLang + " { visibility: visible !important; }";
             style.textContent = newCSS;
         }
         
@@ -875,6 +791,47 @@ function multilang_ajax_get_cache_info() {
 }
 add_action('wp_ajax_multilang_get_cache_info', 'multilang_ajax_get_cache_info');
 
+/**
+ * Filter fragment to show only current language spans
+ */
+function multilang_filter_fragment_to_current_language($fragment_html) {
+    $current_lang = multilang_get_current_language();
+    $available_langs = get_multilang_available_languages();
+    
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    
+    $xpath = new DOMXPath($dom);
+    $span_nodes = $xpath->query('//span[contains(@class, "translate") and contains(@class, "lang-")]');
+    
+    foreach ($span_nodes as $span) {
+        $span_classes = $span->getAttribute('class');
+        $lang_class = null;
+        foreach ($available_langs as $lang) {
+            if (strpos($span_classes, 'lang-' . $lang) !== false) {
+                $lang_class = $lang;
+                break;
+            }
+        }
+        if ($lang_class) {
+            // $visibility = ($lang_class === $current_lang) ? 'visible' : 'hidden';
+            // $span->setAttribute('style', 'visibility: ' . $visibility . ' !important;');
+        }
+    }
+    
+    $result = $dom->saveHTML();
+    $result = preg_replace('/^<!DOCTYPE.+?>/', '', $result);
+    $result = preg_replace('/<html[^>]*>/', '', $result);
+    $result = preg_replace('/<\/html>/', '', $result);
+    $result = preg_replace('/<body[^>]*>/', '', $result);
+    $result = preg_replace('/<\/body>/', '', $result);
+    $result = trim($result);
+    
+    return $result;
+}
+
 
 /**
  * Get excerpt cache settings from JSON file
@@ -907,61 +864,161 @@ add_action('wp_body_open', function() {
 });
 
 // Inject cached fragment into DOMDocument
-function multilang_inject_cached_fragment($dom, $xpath, $selector, $fragment_html) {
-    $current_lang = function_exists('multilang_get_current_language') ? multilang_get_current_language() : 'en';
-    $xp = multilang_css_to_xpath($selector);
-    if ($xp) {
-        $nodes = $xpath->query($xp);
-        $index = 0;
-        foreach ($nodes as $node) {
-            $fragment_key = $selector . '|' . $index;
-            // Determine cache key (should match extraction logic)
-            global $post;
-            $post_id = isset($post) && !empty($post->ID) ? $post->ID : (function_exists('get_the_ID') ? get_the_ID() : md5($_SERVER['REQUEST_URI']));
-            $current_lang = function_exists('multilang_get_current_language') ? multilang_get_current_language() : 'en';
-            $cache_key = $post_id ? $post_id : md5($_SERVER['REQUEST_URI']);
-            $fragment_html_indexed = multilang_get_fragment_cache($cache_key, $fragment_key);
-            if ($fragment_html_indexed === false) {
-                $fragment_html_indexed = $fragment_html;
+function multilang_filter_fragment_to_current_language_regex($fragment_html, $current_lang) {
+    // Remove content for non-current language spans, but keep attributes and add data-translation
+    return preg_replace_callback(
+        '/(<span\s+class="[^"]*translate[^"]*lang-([a-z]{2})[^"]*"[^>]*>)(.*?)(<\/span>)/is',
+        function($matches) use ($current_lang) {
+            $opening_tag = $matches[1];
+            $element_lang = $matches[2];
+            $span_content = $matches[3];
+            $closing_tag = $matches[4];
+            if ($element_lang !== $current_lang) {
+                // Preserve data-translation attribute with original content, but make span empty
+                $encoded_content = htmlspecialchars($span_content, ENT_QUOTES, 'UTF-8');
+                // If data-translation already exists, don't duplicate
+                if (strpos($opening_tag, 'data-translation=') === false) {
+                    $opening_tag = preg_replace('/>$/', ' data-translation="' . $encoded_content . '">', $opening_tag);
+                }
+                // Return empty span with data-translation
+                return $opening_tag . $closing_tag;
+            } else {
+                // Keep content for current language
+                return $opening_tag . $span_content . $closing_tag;
             }
-            while ($node->hasChildNodes()) {
-                $node->removeChild($node->firstChild);
+        },
+        $fragment_html
+    );
+}
+
+/**
+ * Retrieve cached fragments for a page based on structure data
+ */
+function multilang_retrieve_cached_fragments($cache_page_key, $structure_data) {
+    $fragments = array();
+    $all_found = true;
+    foreach ($structure_data as $section => $config) {
+        if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
+        foreach ($config['_selectors'] as $selector) {
+            $normalized_selector = trim($selector);
+            // Try to get fragments for this selector (may have multiple instances)
+            $index = 0;
+            $selector_fragments = array();
+            while (true) {
+                $fragment_key = $normalized_selector . '|' . $index;
+                $fragment_html = multilang_get_cached_fragment($cache_page_key, null, $fragment_key);
+                if ($fragment_html === false) {
+                    break; // No more fragments for this selector
+                }
+                $selector_fragments[] = $fragment_html;
+                $index++;
             }
-            $wrapper = $dom->createElement('div');
-            $wrapper->setAttribute('class', 'multilang-cached');
-            $fragment_dom = new DOMDocument();
-            libxml_use_internal_errors(true);
-            $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html_indexed, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-            libxml_clear_errors();
-            // Hide all .translate.lang-xx spans except for current language
-            $span_nodes = $fragment_dom->getElementsByTagName('span');
-            foreach ($span_nodes as $span) {
-                $class = $span->getAttribute('class');
-                if (preg_match('/lang-([a-z]{2})/', $class, $matches)) {
-                    $lang = $matches[1];
-                    if ($lang !== $current_lang) {
-                        $span->setAttribute('style', 'display:none');
-                    } else {
-                        $span->removeAttribute('style');
+            
+            if (!empty($selector_fragments)) {
+                $fragments[$normalized_selector] = $selector_fragments;
+            } else {
+                $all_found = false;
+            }
+        }
+    }
+    return array($fragments, $all_found);
+}
+
+/**
+ * Inject cached fragments into HTML
+ */
+function multilang_inject_fragments_into_html($html, $fragments) {
+    // Inject any fragments that are found
+    $dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    $xpath = new DOMXPath($dom);
+    foreach ($fragments as $selector => $selector_fragments) {
+        // Filter fragment so only current language span has innerHTML
+        if (function_exists('multilang_filter_fragment_to_current_language')) {
+            $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
+        }
+        $xp = multilang_css_to_xpath($selector);
+        if ($xp) {
+            $nodes = $xpath->query($xp);
+            $fragment_index = 0;
+            foreach ($nodes as $node) {
+                if (isset($selector_fragments[$fragment_index])) {
+                    $fragment_html = $selector_fragments[$fragment_index];
+                    
+                    // Parse the cached fragment
+                    $fragment_dom = new DOMDocument();
+                    libxml_use_internal_errors(true);
+                    $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                    libxml_clear_errors();
+                    
+                    // Replace the entire node with the fragment's root element
+                    $fragment_root = $fragment_dom->documentElement;
+                    if ($fragment_root) {
+                        $imported_fragment = $dom->importNode($fragment_root, true);
+                        $node->parentNode->replaceChild($imported_fragment, $node);
                     }
                 }
+                $fragment_index++;
             }
-            $body_node = $fragment_dom->getElementsByTagName('body')->item(0);
-            if ($body_node && $body_node->hasChildNodes()) {
-                foreach ($body_node->childNodes as $child) {
-                    $imported = $dom->importNode($child, true);
-                    $wrapper->appendChild($imported);
+        }
+    }
+    $result_html = $dom->saveHTML();
+    return $result_html;
+}
+
+/**
+ * Cache fragments from processed HTML
+ */
+function multilang_cache_fragments_from_html($processed_html, $cache_page_key, $structure_data) {
+    // Extract and cache fragments from the processed HTML
+    $processed_dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    $processed_xpath = new DOMXPath($processed_dom);
+    
+    foreach ($structure_data as $section => $config) {
+        if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
+        foreach ($config['_selectors'] as $selector) {
+            $normalized_selector = trim($selector);
+            $xp = multilang_css_to_xpath($normalized_selector);
+            if ($xp) {
+                $nodes = $processed_xpath->query($xp);
+                $index = 0;
+                foreach ($nodes as $node) {
+                    // Add multilang-cached class to the node before saving (only if not already present)
+                    $existing_class = $node->getAttribute('class');
+                    if (strpos($existing_class, 'multilang-cached') === false) {
+                        $new_class = trim($existing_class . ' multilang-cached');
+                        $node->setAttribute('class', $new_class);
+                    }
+                    
+                    // Set visibility styles on language spans
+                    $current_lang = multilang_get_current_language();
+                    $available_langs = get_multilang_available_languages();
+                    $span_nodes = $processed_xpath->query('.//span[contains(@class, "translate") and contains(@class, "lang-")]', $node);
+                    foreach ($span_nodes as $span) {
+                        $span_classes = $span->getAttribute('class');
+                        $lang_class = null;
+                        foreach ($available_langs as $lang) {
+                            if (strpos($span_classes, 'lang-' . $lang) !== false) {
+                                $lang_class = $lang;
+                                break;
+                            }
+                        }
+                        if ($lang_class) {
+                            //$visibility = ($lang_class === $current_lang) ? 'visible' : 'hidden';
+                            //$span->setAttribute('style', 'visibility: ' . $visibility . ' !important;');
+                        }
+                    }
+                    
+                    $fragment_html = $processed_dom->saveHTML($node);
+                    multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
+                    $index++;
                 }
-            } else if ($fragment_dom->documentElement && $fragment_dom->documentElement->hasChildNodes()) {
-                foreach ($fragment_dom->documentElement->childNodes as $child) {
-                    $imported = $dom->importNode($child, true);
-                    $wrapper->appendChild($imported);
-                }
-            } else {
-                $wrapper->appendChild($dom->createTextNode($fragment_html_indexed));
             }
-            $node->appendChild($wrapper);
-            $index++;
         }
     }
 }

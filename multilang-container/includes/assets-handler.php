@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-require_once __DIR__ . '/cache-handler.php';
+// require_once __DIR__ . '/cache-handler.php';
 
 /**
  * Pure CSS solution - hide all languages by default, show only the one with matching body class
@@ -21,7 +21,10 @@ function multilang_inject_immediate_css() {
     if ( multilang_is_backend_operation() ) {
         return;
     }
-    
+    // Only run if cache-handler functions exist
+    if (!function_exists('multilang_get_cached_inline_css') || !function_exists('multilang_get_cached_inline_js')) {
+        return;
+    }
     // Get cached CSS and JS or generate them
     $css = multilang_get_cached_inline_css();
     $js = multilang_get_cached_inline_js();
@@ -102,9 +105,8 @@ function multilang_container_enqueue_scripts() {
 	);
 	
 	// Check if any section uses JavaScript translation by reading structure.json (with caching)
-	$structure_data = multilang_get_cached_structure_data();
+	$structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
 	$has_javascript_sections = false;
-	
 	if ($structure_data && is_array($structure_data)) {
 		foreach ($structure_data as $section => $config) {
 			$section_method = isset($config['_method']) ? $config['_method'] : 'server';
@@ -190,7 +192,7 @@ function multilang_container_enqueue_scripts() {
 	}
 	
 	// Load structure data for JavaScript (with caching)
-	$structure_data = multilang_get_cached_structure_data();
+	$structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
 	
 	// Prepare localized data
 	$localized_data = array(

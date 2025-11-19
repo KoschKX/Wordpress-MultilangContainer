@@ -4,7 +4,31 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Fallback: Load language data from file if cache-handler is not present
+function load_language_data($lang) {
+    $base_dir = dirname(__FILE__) . '/../languages/';
+    $file = $base_dir . $lang . '.json';
+    if (!file_exists($file)) {
+        // Try old uploads location
+        $uploads_dir = dirname(__FILE__) . '/../../../uploads/multilang/';
+        $old_file = $uploads_dir . $lang . '.json';
+        if (file_exists($old_file)) {
+            $file = $old_file;
+        }
+    }
+    if (file_exists($file)) {
+        $json = file_get_contents($file);
+        $data = json_decode($json, true);
+        if (is_array($data)) {
+            return $data;
+        }
+    }
+    error_log('[multilang] load_language_data: No file or invalid JSON for ' . $lang . ' at ' . $file);
+    return array();
+}
+
 function multilang_server_side_translate( $content, $force_lang = null ) {
+    
     static $call_count = 0;
     static $translations = null;
     static $lang_cache = array();
@@ -12,14 +36,17 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
     $call_count++;
     
     if ( multilang_is_backend_operation() ) {
+        error_log('[multilang] Backend operation, skipping translation.');
         return $content;
     }
-    
+
     if ( empty($content) || strlen(trim($content)) < 10 ) {
+        error_log('[multilang] Content too short, skipping translation.');
         return $content;
     }
-    
+
     if ( strpos($content, '<') === false || strlen($content) < 100 ) {
+        error_log('[multilang] Content not HTML or too short, skipping translation.');
         return $content;
     }
     
@@ -60,6 +87,7 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
 
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
     if (empty($translations) || strlen($html) < 100) {
+        error_log('[multilang] No translations or HTML too short.');
         return $html;
     }
     
@@ -71,11 +99,12 @@ function multilang_process_text_for_translations($html, $translations, $current_
     if (!isset($lang_cache[$default_lang])) {
         $lang_cache[$default_lang] = multilang_get_language_data($default_lang);
     }
-    
+
     $current_lang_translations = $lang_cache[$current_lang];
     $default_lang_translations = $lang_cache[$default_lang];
-    
+
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
+        error_log('[multilang] No translation data for current or default language: ' . $current_lang . ', ' . $default_lang);
         return $html;
     }
     
@@ -91,12 +120,14 @@ function multilang_process_text_for_translations($html, $translations, $current_
     
     $body = $dom->getElementsByTagName('body')->item(0);
     if (!$body) {
+        error_log('[multilang] No <body> found in HTML.');
         return $html;
     }
-    
+
     $replacements_made = multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
-    
+
     if ($replacements_made === 0) {
+        error_log('[multilang] No replacements made in content.');
         return $html;
     }
     
@@ -108,8 +139,26 @@ function multilang_process_text_for_translations($html, $translations, $current_
 }
 
 function multilang_get_language_data($lang) {
-    // Use cached version
-    return multilang_get_cached_language_data($lang);
+    // Use cached version if available, otherwise load directly
+    if (function_exists('multilang_get_cached_language_data')) {
+        $data = multilang_get_cached_language_data($lang);
+        // error_log('[multilang] Using cached language data for ' . $lang . ': ' . (is_array($data) ? count($data) : 'not array'));
+        return $data;
+    }
+    // Fallback: load language data directly
+    if (function_exists('load_language_data')) {
+        $data = load_language_data($lang);
+        // error_log('[multilang] Using direct loaded language data for ' . $lang . ': ' . (is_array($data) ? count($data) : 'not array'));
+        return $data;
+    }
+    // Try global translations if available
+    global $multilang_translations;
+    if (isset($multilang_translations[$lang])) {
+        error_log('[multilang] Using global $multilang_translations for ' . $lang . ': ' . (is_array($multilang_translations[$lang]) ? count($multilang_translations[$lang]) : 'not array'));
+        return $multilang_translations[$lang];
+    }
+    error_log('[multilang] No language data found for ' . $lang);
+    return array();
 }
 
 function multilang_find_translation_in_data($text, $data) {
@@ -229,6 +278,7 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
 }
 
 function multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang) {
+    
     static $structure_data = null;
     static $sections = null;
     static $all_selectors = null;
@@ -236,10 +286,15 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
     $replacements_made = 0;
     
     if ($structure_data === null) {
-        // Use cached structure data
-        $structure_data = multilang_get_cached_structure_data();
-        
-        if (empty($structure_data)) {
+        // Use cached structure data if available, otherwise load directly
+        if (function_exists('multilang_get_cached_structure_data')) {
+            $structure_data = multilang_get_cached_structure_data();
+            // error_log('[multilang] Using cached structure data: ' . (is_array($structure_data) ? count($structure_data) : 'not array'));
+        } else if (function_exists('load_structure_data')) {
+            $structure_data = load_structure_data();
+            // error_log('[multilang] Using direct loaded structure data: ' . (is_array($structure_data) ? count($structure_data) : 'not array'));
+        } else {
+            // error_log('[multilang] No structure data found');
             $structure_data = false;
         }
     }
@@ -394,6 +449,7 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
 }
 
 function multilang_element_has_class_in_tree($element, $class_name) {
+    
     $current = $element;
     $depth = 0;
     $max_depth = 10;
@@ -559,30 +615,34 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
 static $multilang_translation_cache = null;
 
 function multilang_start_page_buffer() {
-    if ( multilang_is_backend_operation() ) {
+
+    // Skip if page is excluded from translation
+    if (function_exists('multilang_is_page_excluded_from_cache') && multilang_is_page_excluded_from_cache()) {
+        return;
+    }
+    if (function_exists('multilang_is_cache_enabled') && !multilang_is_cache_enabled()) {
         return;
     }
     
+    if ( multilang_is_backend_operation() ) {
+        return;
+    }
+
     // Don't buffer AJAX - check multiple ways
     if ( defined('DOING_AJAX') && DOING_AJAX ) {
         return;
     }
-    
     if ( function_exists('wp_doing_ajax') && wp_doing_ajax() ) {
         return;
     }
-    
     if ( !empty($_REQUEST['action']) || !empty($_POST['action']) || !empty($_GET['action']) ) {
         return;
     }
-    
     if ( !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest' ) {
         return;
     }
-    
-    $structure_data = multilang_get_cached_structure_data();
+    $structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
     $has_server_sections = false;
-    
     if ($structure_data && is_array($structure_data)) {
         foreach ($structure_data as $section => $config) {
             $section_method = isset($config['_method']) ? $config['_method'] : 'server';
@@ -592,22 +652,27 @@ function multilang_start_page_buffer() {
             }
         }
     }
-    
     if (!$has_server_sections) {
         $translation_method = get_option('multilang_container_translation_method', 'server');
         $has_server_sections = ($translation_method === 'server');
     }
-    
     if (!$has_server_sections) {
         return;
     }
-    
     ob_start('multilang_process_entire_page');
 }
 add_action('template_redirect', 'multilang_start_page_buffer', 0);
 
 function multilang_process_entire_page($html) {
+
     if ( multilang_is_backend_operation() ) {
+        return $html;
+    }
+
+    if (function_exists('multilang_is_page_excluded_from_cache') && multilang_is_page_excluded_from_cache()) {
+        return $html;
+    }
+    if (function_exists('multilang_is_cache_enabled') && !multilang_is_cache_enabled()) {
         return $html;
     }
     
@@ -653,86 +718,29 @@ function multilang_process_entire_page($html) {
     $cache_page_key = $post_id ? $post_id : md5($_SERVER['REQUEST_URI']);
 
     // Get structure data and selectors
-    $structure_data = multilang_get_cached_structure_data();
+    $structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
     if (!$structure_data || !is_array($structure_data)) {
         // Fallback: process whole page
         return multilang_server_side_translate($html);
     }
 
+    // Check if fragment caching functions are available
+    if (!function_exists('multilang_retrieve_cached_fragments') || 
+        !function_exists('multilang_inject_fragments_into_html') || 
+        !function_exists('multilang_cache_fragments_from_html')) {
+        // Fallback: process whole page without fragment caching
+        return multilang_server_side_translate($html);
+    }
+
     // For each section/selector, try to get cached fragment
     // error_log('[FRAGMENT RETRIEVAL] post_id=' . var_export($post_id, true) . ', current_lang=' . var_export($current_lang, true));
-    $fragments = array();
-    $all_found = true;
-    foreach ($structure_data as $section => $config) {
-        if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
-        foreach ($config['_selectors'] as $selector) {
-            $normalized_selector = trim($selector);
-            // Try to get fragments for this selector (may have multiple instances)
-            $index = 0;
-            $selector_fragments = array();
-            while (true) {
-                $fragment_key = $normalized_selector . '|' . $index;
-                $fragment_html = multilang_get_cached_fragment($cache_page_key, null, $fragment_key);
-                if ($fragment_html === false) {
-                    break; // No more fragments for this selector
-                }
-                $selector_fragments[] = $fragment_html;
-                $index++;
-            }
-            
-            if (!empty($selector_fragments)) {
-                $fragments[$normalized_selector] = $selector_fragments;
-            } else {
-                $all_found = false;
-            }
-        }
-    }
+    list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
 
     // If all fragments are found, inject them and bypass heavy work
     // error_log('Fragment injection block check: all_found=' . ($all_found ? 'true' : 'false'));
     // error_log('Fragment injection block check: fragments=' . print_r($fragments, true));
     if (!empty($fragments)) {
-        // Inject any fragments that are found
-        $dom = new DOMDocument();
-        libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        libxml_clear_errors();
-        $xpath = new DOMXPath($dom);
-        foreach ($fragments as $selector => $selector_fragments) {
-            // Filter fragment so only current language span has innerHTML
-            if (function_exists('multilang_filter_fragment_to_current_language')) {
-                $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
-            }
-            $xp = multilang_css_to_xpath($selector);
-            if ($xp) {
-                $nodes = $xpath->query($xp);
-                $fragment_index = 0;
-                foreach ($nodes as $node) {
-                    if (isset($selector_fragments[$fragment_index])) {
-                        $fragment_html = $selector_fragments[$fragment_index];
-                        
-                        // Parse the cached fragment
-                        $fragment_dom = new DOMDocument();
-                        libxml_use_internal_errors(true);
-                        $fragment_dom->loadHTML('<?xml encoding="UTF-8">' . $fragment_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                        libxml_clear_errors();
-                        
-                        // Replace the entire node with the fragment's root element
-                        $fragment_root = $fragment_dom->documentElement;
-                        if ($fragment_root) {
-                            $imported_fragment = $dom->importNode($fragment_root, true);
-                            $node->parentNode->replaceChild($imported_fragment, $node);
-                        }
-                    }
-                    $fragment_index++;
-                }
-            }
-        }
-        $result_html = $dom->saveHTML();
-        // Apply the hide filter to the final output
-        if (function_exists('multilang_hide_non_current_language')) {
-            $result_html = multilang_hide_non_current_language($result_html);
-        }
+        $result_html = multilang_inject_fragments_into_html($html, $fragments);
         return $result_html;
     } else {
        // error_log('Fragment injection block skipped: no fragments found');
@@ -742,36 +750,7 @@ function multilang_process_entire_page($html) {
     $processed_html = multilang_server_side_translate($html);
     $processed_html = str_replace('</head>', '<!-- Server-side translation processed and cached --></head>', $processed_html);
 
-    // Extract and cache fragments from the processed HTML
-    $processed_dom = new DOMDocument();
-    libxml_use_internal_errors(true);
-    $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-    libxml_clear_errors();
-    $processed_xpath = new DOMXPath($processed_dom);
-    
-    foreach ($structure_data as $section => $config) {
-        if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
-        foreach ($config['_selectors'] as $selector) {
-            $normalized_selector = trim($selector);
-            $xp = multilang_css_to_xpath($normalized_selector);
-            if ($xp) {
-                $nodes = $processed_xpath->query($xp);
-                $index = 0;
-                foreach ($nodes as $node) {
-                    // Add multilang-cached class to the node before saving (only if not already present)
-                    $existing_class = $node->getAttribute('class');
-                    if (strpos($existing_class, 'multilang-cached') === false) {
-                        $new_class = trim($existing_class . ' multilang-cached');
-                        $node->setAttribute('class', $new_class);
-                    }
-                    
-                    $fragment_html = $processed_dom->saveHTML($node);
-                    multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
-                    $index++;
-                }
-            }
-        }
-    }
+    multilang_cache_fragments_from_html($processed_html, $cache_page_key, $structure_data);
 
     return $processed_html;
 }
@@ -865,26 +844,24 @@ function multilang_translate_partial_text($text, $lang_data) {
 
 function multilang_get_all_container_selectors() {
     static $all_selectors = null;
-    
     if ($all_selectors === null) {
         $all_selectors = array();
-        
-        // Use cached structure data
-        $structure_data = multilang_get_cached_structure_data();
-        
-        if ($structure_data && is_array($structure_data)) {
-            foreach ($structure_data as $category => $config) {
-                if (is_array($config) && isset($config['_selectors'])) {
-                    $selectors = $config['_selectors'];
-                    if (is_array($selectors)) {
-                        $all_selectors = array_merge($all_selectors, $selectors);
+        // Use cached structure data only if function exists
+        if (function_exists('multilang_get_cached_structure_data')) {
+            $structure_data = multilang_get_cached_structure_data();
+            if ($structure_data && is_array($structure_data)) {
+                foreach ($structure_data as $category => $config) {
+                    if (is_array($config) && isset($config['_selectors'])) {
+                        $selectors = $config['_selectors'];
+                        if (is_array($selectors)) {
+                            $all_selectors = array_merge($all_selectors, $selectors);
+                        }
                     }
                 }
+                $all_selectors = array_unique($all_selectors);
             }
-            $all_selectors = array_unique($all_selectors);
         }
     }
-    
     return $all_selectors;
 }
 
@@ -958,3 +935,4 @@ function multilang_process_partial_translation($text, $lang_data) {
     $partial_cache[$cache_key] = $result;
     return $result;
 }
+

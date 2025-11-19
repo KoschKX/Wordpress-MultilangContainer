@@ -247,3 +247,52 @@ if (!defined('ABSPATH')) {
 		$utf8 = mb_convert_encoding($str, 'UTF-8', 'UTF-8');
 		return base64_encode($utf8);
 	}
+
+
+/* CACHING OPTIONS */
+
+	function multilang_is_page_excluded_from_cache() {
+		$json_options = multilang_get_cache_options();
+		$options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
+		$current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+		error_log('[multilang] EXCLUDE DEBUG: current_path=' . $current_path . ' | options=' . $options);
+		if (empty($options)) {
+			error_log('[multilang] EXCLUDE DEBUG: No excluded pages set. Returning false.');
+			return false;
+		}
+		$excluded_pages = array_map('trim', explode(',', $options));
+		foreach ($excluded_pages as $excluded) {
+			if (empty($excluded)) {
+				continue;
+			}
+			$excluded = trim($excluded, '/');
+			$current = trim($current_path, '/');
+			error_log('[multilang] EXCLUDE DEBUG: Checking excluded=' . $excluded . ' against current=' . $current);
+			if ($current === $excluded || strpos($current, $excluded) === 0) {
+				error_log('[multilang] EXCLUDE DEBUG: MATCH! Returning true.');
+				return true;
+			}
+		}
+		error_log('[multilang] EXCLUDE DEBUG: No match. Returning false.');
+		return false;
+	}
+
+	function multilang_get_cache_options() {
+		$options_file = dirname(__FILE__) . '/../../../uploads/multilang/options.json';
+		if (file_exists($options_file)) {
+			$json = file_get_contents($options_file);
+			$data = json_decode($json, true);
+			if (is_array($data)) {
+				return $data;
+			}
+		}
+		return array();
+	}
+
+	function multilang_is_ajax_cache_enabled() {
+		$json_options = multilang_get_cache_options();
+		if (isset($json_options['cache_ajax_requests'])) {
+			return (bool) $json_options['cache_ajax_requests'];
+		}
+		return false;
+	}
