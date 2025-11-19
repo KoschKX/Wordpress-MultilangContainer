@@ -2,7 +2,7 @@
 /**
  * Multilang Container - Utilities
  * 
- * Helper functions for language management and common operations
+ * Functions for language management and other common tasks
  */
 
 if (!defined('ABSPATH')) {
@@ -255,9 +255,7 @@ if (!defined('ABSPATH')) {
 		$json_options = multilang_get_cache_options();
 		$options = isset($json_options['cache_exclude_pages']) ? $json_options['cache_exclude_pages'] : '';
 		$current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-		error_log('[multilang] EXCLUDE DEBUG: current_path=' . $current_path . ' | options=' . $options);
 		if (empty($options)) {
-			error_log('[multilang] EXCLUDE DEBUG: No excluded pages set. Returning false.');
 			return false;
 		}
 		$excluded_pages = array_map('trim', explode(',', $options));
@@ -267,13 +265,10 @@ if (!defined('ABSPATH')) {
 			}
 			$excluded = trim($excluded, '/');
 			$current = trim($current_path, '/');
-			error_log('[multilang] EXCLUDE DEBUG: Checking excluded=' . $excluded . ' against current=' . $current);
 			if ($current === $excluded || strpos($current, $excluded) === 0) {
-				error_log('[multilang] EXCLUDE DEBUG: MATCH! Returning true.');
 				return true;
 			}
 		}
-		error_log('[multilang] EXCLUDE DEBUG: No match. Returning false.');
 		return false;
 	}
 

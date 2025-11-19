@@ -4,9 +4,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Get clean excerpt for SEO/meta tags - only current language
- */
+// Get a clean excerpt for SEO/meta tags, using only the current language
 function multilang_get_clean_seo_excerpt($post_id = null) {
     if (!$post_id) {
         $post_id = get_the_ID();
@@ -16,7 +14,7 @@ function multilang_get_clean_seo_excerpt($post_id = null) {
         return '';
     }
     
-    // Get current language
+    // Figure out which language to use
     $current_lang = multilang_get_current_language();
     if (!$current_lang) {
         $current_lang = get_multilang_default_language();
@@ -25,27 +23,27 @@ function multilang_get_clean_seo_excerpt($post_id = null) {
         }
     }
     
-    // Check if post has multilang excerpts
+    // See if the post has excerpts for multiple languages
     $excerpts = get_post_meta($post_id, '_multilang_excerpts', true);
     
     if (!empty($excerpts) && is_array($excerpts) && isset($excerpts[$current_lang])) {
-        // Return plain text excerpt for current language only
+    // Use the excerpt for the current language
         return wp_strip_all_tags($excerpts[$current_lang]);
     }
     
-    // Fallback: check post excerpt
+    // If no multilang excerpt, try the regular post excerpt
     $post = get_post($post_id);
     if ($post && !empty($post->post_excerpt)) {
         return wp_strip_all_tags($post->post_excerpt);
     }
     
-    // Fallback: generate from content
+    // If there's no excerpt, try to make one from the post content
     if ($post && !empty($post->post_content)) {
         $content = $post->post_content;
         
-        // If content has language spans, extract only current language
+    // If the content has language-specific spans, grab just the current language
         if (strpos($content, 'translate lang-') !== false || strpos($content, 'data-lang="') !== false) {
-            // Try to extract current language content
+            // Pull out the content for the current language
             $pattern = '/<span[^>]*(?:class="[^"]*translate[^"]*lang-' . preg_quote($current_lang, '/') . '[^"]*"|data-lang="' . preg_quote($current_lang, '/') . '")[^>]*>(.*?)<\/span>/s';
             preg_match_all($pattern, $content, $matches);
             
@@ -54,20 +52,18 @@ function multilang_get_clean_seo_excerpt($post_id = null) {
             }
         }
         
-        // Strip shortcodes and HTML
+    // Remove shortcodes and HTML tags
         $content = strip_shortcodes($content);
         $content = wp_strip_all_tags($content);
         
-        // Generate excerpt
+    // Trim the content to make an excerpt
         return wp_trim_words($content, 55, '...');
     }
     
     return '';
 }
 
-/**
- * Filter Avada's Open Graph description
- */
+// Filter Avada's Open Graph description to use the right language
 function multilang_filter_avada_og_description($description) {
     if (empty($description)) {
         return $description;
@@ -78,7 +74,7 @@ function multilang_filter_avada_og_description($description) {
         return $description;
     }
     
-    // Get clean excerpt for current language
+    // Get the excerpt for the current language
     $clean_excerpt = multilang_get_clean_seo_excerpt($post->ID);
     
     if (!empty($clean_excerpt)) {

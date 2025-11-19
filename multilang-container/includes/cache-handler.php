@@ -1,5 +1,5 @@
 <?php
-// File-based caching for translated content
+// Handles caching for translated content using files
 
 if (!defined('ABSPATH')) {
     exit;
@@ -16,9 +16,7 @@ function multilang_is_cache_debug_logging_enabled() {
 
 
 
-/**
- * Fragment-based JSON caching for selector fragments
- */
+// Store fragments of HTML in JSON files for caching
 function multilang_get_fragment_cache_file($cache_key) {
     $cache_dir = multilang_get_cache_dir();
     $safe_key = sanitize_file_name($cache_key);
@@ -26,14 +24,14 @@ function multilang_get_fragment_cache_file($cache_key) {
 }
 
 function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
-    // Always use the exact selector from structure data
+    // Use the selector exactly as it appears in the structure
     $file = multilang_get_fragment_cache_file($cache_key);
     $data = array();
     if (file_exists($file)) {
         $content = file_get_contents($file);
         $data = json_decode($content, true) ?: array();
     }
-    // Cache the full HTML of the selected element, with all language spans present
+    // Save the full HTML for the selected element, including all language spans
     $data[$selector] = $fragment;
     file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     return true;
@@ -67,9 +65,7 @@ function multilang_delete_fragment_cache($cache_key, $selector) {
     return true;
 }
 
-/**
- * Save cache options to JSON file
- */
+// Save cache settings to a JSON file
 function multilang_save_cache_options($options) {
     $upload_dir = wp_upload_dir();
     $options_file = trailingslashit($upload_dir['basedir']) . 'multilang/cache-options.json';
@@ -1008,72 +1004,43 @@ function multilang_inject_fragments_into_html($html, $fragments) {
  * Cache fragments from processed HTML
  */
 function multilang_cache_fragments_from_html($processed_html, $cache_page_key, $structure_data) {
-    // Extract and cache fragments from the processed HTML using regex for reliability
+    // Cache all .multilang-container elements (including nested) in DOM order
+    $processed_dom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    $processed_xpath = new DOMXPath($processed_dom);
+    $nodes = $processed_xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), " multilang-container ")]');
+    $index = 0;
+    foreach ($nodes as $node) {
+        $existing_class = $node->getAttribute('class');
+        if (strpos($existing_class, 'multilang-cached') === false) {
+            $new_class = trim($existing_class . ' multilang-cached');
+            $node->setAttribute('class', $new_class);
+        }
+        $fragment_html = $processed_dom->saveHTML($node);
+        multilang_set_cached_fragment($cache_page_key, null, '.multilang-container|' . $index, $fragment_html);
+        $index++;
+    }
+    // Optionally cache other selectors as before
     foreach ($structure_data as $section => $config) {
         if (!isset($config['_selectors']) || !is_array($config['_selectors'])) continue;
         foreach ($config['_selectors'] as $selector) {
+            if ($selector === '.multilang-container') continue; // Already handled above
             $normalized_selector = trim($selector);
-            $tag = strtolower($normalized_selector);
-            $regex = '';
-            if ($tag === 'body' || $tag === 'html') {
-                // Never cache body or html
-                continue;
-            } else if (preg_match('/^[a-z0-9_-]+$/', $tag)) {
-                // Tag selector (e.g., footer, form, header)
-                $regex = '/<' . $tag . '\b[^>]*>(.*?)<\/' . $tag . '>/is';
-            } else if (strpos($tag, '.') === 0) {
-                // Class selector (e.g., .myclass)
-                $class = preg_quote(substr($tag, 1), '/');
-                $regex = '/<([a-z0-9]+)[^>]*class=["\'][^>]*\b' . $class . '\b[^>]*["\'][^>]*>(.*?)<\/\1>/is';
-            } else if (strpos($tag, '#') === 0) {
-                // ID selector (e.g., #myid)
-                $id = preg_quote(substr($tag, 1), '/');
-                $regex = '/<([a-z0-9]+)[^>]*id=["\']' . $id . '["\'][^>]*>(.*?)<\/\1>/is';
-            }
-            $matches = array();
-            $found = false;
-            if ($regex && preg_match_all($regex, $processed_html, $matches)) {
-                $found = true;
-                foreach ($matches[0] as $index => $fragment_html) {
-                    // Add multilang-cached class if not present
-                    if (preg_match('/class=["\']([^"\']*)["\']/', $fragment_html, $class_match)) {
-                        if (strpos($class_match[1], 'multilang-cached') === false) {
-                            $fragment_html = preg_replace('/class=["\']([^"\']*)["\']/', 'class="' . trim($class_match[1] . ' multilang-cached') . '"', $fragment_html, 1);
-                        }
-                    } else {
-                        // Add class if missing
-                        $fragment_html = preg_replace('/^<([a-z0-9]+)/i', '<$1 class="multilang-cached"', $fragment_html, 1);
+            $xp = multilang_css_to_xpath($normalized_selector);
+            if ($xp) {
+                $nodes = $processed_xpath->query($xp);
+                $index = 0;
+                foreach ($nodes as $node) {
+                    $existing_class = $node->getAttribute('class');
+                    if (strpos($existing_class, 'multilang-cached') === false) {
+                        $new_class = trim($existing_class . ' multilang-cached');
+                        $node->setAttribute('class', $new_class);
                     }
+                    $fragment_html = $processed_dom->saveHTML($node);
                     multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
-                }
-                if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
-                    // error_log('[Multilang Cache] Regex fragment extraction for selector ' . $normalized_selector . ' found ' . count($matches[0]) . ' matches.');
-                }
-            }
-            // Fallback to DOMDocument/XPath if regex fails
-            if (!$found) {
-                $processed_dom = new DOMDocument();
-                libxml_use_internal_errors(true);
-                $processed_dom->loadHTML('<?xml encoding="UTF-8">' . $processed_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                libxml_clear_errors();
-                $processed_xpath = new DOMXPath($processed_dom);
-                $xp = multilang_css_to_xpath($normalized_selector);
-                if ($xp) {
-                    $nodes = $processed_xpath->query($xp);
-                    $index = 0;
-                    foreach ($nodes as $node) {
-                        $existing_class = $node->getAttribute('class');
-                        if (strpos($existing_class, 'multilang-cached') === false) {
-                            $new_class = trim($existing_class . ' multilang-cached');
-                            $node->setAttribute('class', $new_class);
-                        }
-                        $fragment_html = $processed_dom->saveHTML($node);
-                        multilang_set_cached_fragment($cache_page_key, null, $normalized_selector . '|' . $index, $fragment_html);
-                        $index++;
-                    }
-                    if (function_exists('multilang_is_cache_debug_logging_enabled') && multilang_is_cache_debug_logging_enabled()) {
-                        // error_log('[Multilang Cache] DOM fallback fragment extraction for selector ' . $normalized_selector . ' found ' . $index . ' matches.');
-                    }
+                    $index++;
                 }
             }
         }
