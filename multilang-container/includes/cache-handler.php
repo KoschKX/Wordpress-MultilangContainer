@@ -24,7 +24,46 @@ function multilang_get_fragment_cache_file($cache_key) {
 }
 
 function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
-    // Use the selector exactly as it appears in the structure
+    // Don't cache anything on the <body> or <html> tags, or their direct children
+    $selector_trim = trim(strtolower($selector));
+    if (
+        $selector_trim === 'body' ||
+        $selector_trim === 'html' ||
+        strpos($selector_trim, 'body ') === 0 ||
+        strpos($selector_trim, 'html ') === 0
+    ) {
+        // Skip caching for these selectors
+        return false;
+    }
+
+    // Check if the fragment is the <body>, <html>, or a direct child of those tags
+    if (is_string($fragment)) {
+        $fragment_trim = ltrim($fragment);
+        // If the fragment starts with <body> or <html>, don't cache it
+        if (stripos($fragment_trim, '<body') === 0 || stripos($fragment_trim, '<html') === 0) {
+            return false;
+        }
+        // Use DOMDocument to see if the root or parent is <body> or <html>
+        libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        $loaded = $dom->loadHTML('<?xml encoding="utf-8" ?>' . $fragment_trim);
+        if ($loaded) {
+            $root = $dom->documentElement;
+            if ($root && ($root->nodeName === 'body' || $root->nodeName === 'html')) {
+                return false;
+            }
+            // If the fragment is a single element, check if its parent would be body or html
+            $xpath = new DOMXPath($dom);
+            $nodes = $xpath->query('/*[1]');
+            if ($nodes->length === 1) {
+                $node = $nodes->item(0);
+                if ($node->parentNode && ($node->parentNode->nodeName === 'body' || $node->parentNode->nodeName === 'html')) {
+                    return false;
+                }
+            }
+        }
+        libxml_clear_errors();
+    }
     $file = multilang_get_fragment_cache_file($cache_key);
     $data = array();
     if (file_exists($file)) {
@@ -131,9 +170,7 @@ function multilang_set_cache($cache_key, $data) {
     }
     $cache_logged_in = isset($json_options['cache_logged_in']) ? intval($json_options['cache_logged_in']) : 0;
     if (function_exists('is_user_logged_in') && is_user_logged_in()) {
-        if (intval($cache_logged_in) !== 1) {
-            return false;
-        } else if (is_string($data)) {
+      if (is_string($data)) {
             // Remove admin bar markup and related scripts from HTML when caching for logged-in users
             // Remove <div id="wpadminbar"> ... </div>
             $data = preg_replace('/<div id="wpadminbar"[\s\S]*?<\/div>/i', '', $data);
@@ -141,7 +178,7 @@ function multilang_set_cache($cache_key, $data) {
             $data = preg_replace('/<script[^>]*>[^<]*customize-support[^<]*<\/script>/i', '', $data);
             // Remove all <li> elements with id starting with wp-admin-bar-
             $data = preg_replace('/<li[^>]+id="wp-admin-bar-[^>]+>[\s\S]*?<\/li>/i', '', $data);
-        }
+      }
     }
     $cache_file = multilang_get_cache_file_path($cache_key);
     $serialized = serialize($data);
@@ -348,19 +385,16 @@ function multilang_get_cached_structure_data() {
     $cache_key = 'structure_data_' . $file_mtime;
     
     $cached = multilang_get_cache($cache_key, 0);
-    
     if ($cached !== false) {
         return $cached;
     }
-    
     $structure_data = array();
     if (file_exists($structure_file)) {
         $structure_content = file_get_contents($structure_file);
         $structure_data = json_decode($structure_content, true) ?: array();
     }
-    
+    // Only set cache if it was missing
     multilang_set_cache($cache_key, $structure_data);
-    
     return $structure_data;
 }
 
@@ -375,19 +409,16 @@ function multilang_get_cached_language_data($lang) {
     $cache_key = 'lang_data_' . $lang . '_' . $file_mtime;
     
     $cached = multilang_get_cache($cache_key, 0);
-    
     if ($cached !== false) {
         return $cached;
     }
-    
     $lang_data = array();
     if (file_exists($lang_file)) {
         $lang_content = file_get_contents($lang_file);
         $lang_data = json_decode($lang_content, true) ?: array();
     }
-    
+    // Only set cache if it was missing
     multilang_set_cache($cache_key, $lang_data);
-    
     return $lang_data;
 }
 
@@ -934,7 +965,6 @@ function multilang_inject_fragments_into_html($html, $fragments) {
             if (function_exists('multilang_filter_fragment_to_current_language')) {
                 $selector_fragments = array_map('multilang_filter_fragment_to_current_language', $selector_fragments);
             }
-            // ...existing code for regex and DOM injection...
             $tag = strtolower($selector);
             $regex = '';
             if ($tag === 'body' || $tag === 'html') {
