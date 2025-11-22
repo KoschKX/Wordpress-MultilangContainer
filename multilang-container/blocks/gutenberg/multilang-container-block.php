@@ -87,27 +87,21 @@ function multilang_container_render_callback($attributes, $content) {
 		}
 	}
 	
-	// Build output with all languages
-	$output = '<div class="multilang-container"><div class="translate">';
-	
+	// Build output with all languages, each lang-xx also gets .translate
+	$output = '<div class="multilang-container">';
 	foreach ($available_languages as $lang) {
+		$classes = 'wp-block-group lang-' . esc_attr($lang) . ' translate has-global-padding is-layout-constrained wp-block-group-is-layout-constrained';
 		if (isset($language_blocks[$lang])) {
-			// Check if existing content is empty
 			$text_content = trim(strip_tags($language_blocks[$lang]));
 			if (empty($text_content) && !empty($default_content)) {
-				// Use fallback content
-				$output .= '<div class="wp-block-group lang-' . esc_attr($lang) . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $default_content . '</div>';
+				$output .= '<div class="' . $classes . '">' . $default_content . '</div>';
 			} else {
-				// Use existing content
-				$output .= '<div class="wp-block-group lang-' . esc_attr($lang) . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $language_blocks[$lang] . '</div>';
+				$output .= '<div class="' . $classes . '">' . $language_blocks[$lang] . '</div>';
 			}
 		} else if (!empty($default_content)) {
-			// Add missing language with fallback
-			$output .= '<div class="wp-block-group lang-' . esc_attr($lang) . ' has-global-padding is-layout-constrained wp-block-group-is-layout-constrained">' . $default_content . '</div>';
+			$output .= '<div class="' . $classes . '">' . $default_content . '</div>';
 		}
 	}
-	
-	$output .= '</div></div>';
-	
+	$output .= '</div>';
 	return $output;
 }
