@@ -581,6 +581,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
         } elseif ($node->nodeType === XML_ELEMENT_NODE) {
             $replacements_made += multilang_wrap_text_nodes($node, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes, $current_section);
             
+            // Translate common attributes for all elements
             foreach (array('title', 'data-title', 'alt') as $attr) {
                 if ($node->hasAttribute($attr)) {
                     $attr_value = $node->getAttribute($attr);
@@ -588,6 +589,32 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
                     if ($translated_attr !== $attr_value) {
                         $node->setAttribute($attr, $translated_attr);
                     }
+                }
+            }
+
+            // For input elements, add value-xx attributes for each language and set value to default language
+            if (strtolower($node->nodeName) === 'input' && $node->hasAttribute('value')) {
+                $attr_value = $node->getAttribute('value');
+                if (!empty($attr_value)) {
+                    // Get all available languages
+                    $langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : array($default_lang);
+                    // Set value-xx for each language
+                    foreach ($langs as $lang) {
+                        $lang_data = function_exists('multilang_get_language_data') ? multilang_get_language_data($lang) : array();
+                        $translation = multilang_find_translation_in_data($attr_value, $lang_data);
+                        if (!$translation && strlen($attr_value) <= 50) {
+                            $translation = function_exists('multilang_process_partial_translation') ? multilang_process_partial_translation($attr_value, $lang_data) : null;
+                        }
+                        $final_value = $translation ? $translation : $attr_value;
+                        $node->setAttribute('value-' . $lang, $final_value);
+                    }
+                    // Set value to default language
+                    $default_translation = multilang_find_translation_in_data($attr_value, $default_lang_translations);
+                    if (!$default_translation && strlen($attr_value) <= 50) {
+                        $default_translation = function_exists('multilang_process_partial_translation') ? multilang_process_partial_translation($attr_value, $default_lang_translations) : null;
+                    }
+                    $final_default = $default_translation ? $default_translation : $attr_value;
+                    $node->setAttribute('value', $final_default);
                 }
             }
         }

@@ -512,6 +512,23 @@
                 button.textContent = button.getAttribute(translationKey);
             }
         });
+
+        // Update input values for all inputs with value-xx attributes
+        document.querySelectorAll('input[value][value-' + newLang + ']').forEach(function(input) {
+            var newValue = input.getAttribute('value-' + newLang);
+            if (typeof newValue === 'string') {
+                input.value = newValue;
+            }
+        });
+        // Optionally, reset to default if no value-xx exists
+        document.querySelectorAll('input[value]').forEach(function(input) {
+            if (!input.hasAttribute('value-' + newLang)) {
+                var defaultValue = input.getAttribute('value');
+                if (typeof defaultValue === 'string') {
+                    input.value = defaultValue;
+                }
+            }
+        });
     }
 
     function findTranslationInData(text, translationData) {
