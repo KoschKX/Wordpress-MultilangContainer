@@ -18,14 +18,15 @@ function multilang_save_languages_ajax() {
 		wp_send_json_error(['message' => 'Invalid nonce']);
 	}
 
+	// Use JSON for all language settings
+	$options = function_exists('multilang_get_options') ? multilang_get_options() : array();
 	$languages = isset($_POST['multilang_languages']) ? array_map('sanitize_text_field', $_POST['multilang_languages']) : [];
-	update_option('multilang_container_languages', $languages);
-
+	$options['languages'] = $languages;
 	$default_lang = isset($_POST['multilang_default_language']) ? sanitize_text_field($_POST['multilang_default_language']) : '';
-	update_option('multilang_container_default_language', $default_lang);
-
+	$options['default_language'] = $default_lang;
 	$exclude_selectors = isset($_POST['multilang_exclude_selectors']) ? sanitize_text_field($_POST['multilang_exclude_selectors']) : '';
-	update_option('multilang_container_exclude_selectors', $exclude_selectors);
+	$options['exclude_selectors'] = $exclude_selectors;
+	if (function_exists('multilang_save_options')) multilang_save_options($options);
 
 	// Regenerate CSS file
 	$css_file_path = function_exists('get_switchcss_file_path') ? get_switchcss_file_path() : '';
@@ -61,7 +62,8 @@ function multilang_container_settings_page() {
 	$translation_message = '';
 	$translation_message_type = 'updated';
 	$translations = load_translations();
-	$available_languages = get_option('multilang_container_languages', array('en'));
+	$options = function_exists('multilang_get_options') ? multilang_get_options() : array();
+	$available_languages = isset($options['languages']) ? $options['languages'] : array('en');
 	
 	// Handle tab switching
 	$active_tab = isset($_GET['tab']) ? $_GET['tab'] : 'languages';
@@ -76,22 +78,19 @@ function multilang_container_settings_page() {
 	
 	// Handle form submission - simplified to match original
 	if (isset($_POST['multilang_languages']) && check_admin_referer('multilang_container_settings', 'multilang_container_nonce')) {
+		$options = function_exists('multilang_get_options') ? multilang_get_options() : array();
 		$languages = array_map('sanitize_text_field', $_POST['multilang_languages']);
-		update_option('multilang_container_languages', $languages);
-		
+		$options['languages'] = $languages;
 		$default_lang = sanitize_text_field($_POST['multilang_default_language']);
-		update_option('multilang_container_default_language', $default_lang);
-		
+		$options['default_language'] = $default_lang;
 		$exclude_selectors = sanitize_text_field($_POST['multilang_exclude_selectors']);
-		update_option('multilang_container_exclude_selectors', $exclude_selectors);
-		
+		$options['exclude_selectors'] = $exclude_selectors;
+		if (function_exists('multilang_save_options')) multilang_save_options($options);
 		// Regenerate CSS file when settings change - FORCED VERSION
 		$css_file_path = get_switchcss_file_path();
 		$css_content = multilang_generate_css($languages);
 		$result = file_put_contents($css_file_path, $css_content, LOCK_EX);
-
 		multliang_copy_flag_images($languages);
-		
 		if ($result !== false) {
 			echo '<div class="updated"><p>Settings saved.</p></div>';
 		} else {
@@ -314,11 +313,13 @@ function multilang_container_settings_page() {
 
 	
 	// Get languages, defaulting to English only if nothing is saved
-	$langs = get_option('multilang_container_languages', false);
+	// Get languages from JSON only
+	$langs = isset($options['languages']) ? $options['languages'] : false;
 	if ($langs === false) {
 		// First time setup - default to English only
 		$langs = array('en');
-		update_option('multilang_container_languages', $langs);
+		$options['languages'] = $langs;
+		if (function_exists('multilang_save_options')) multilang_save_options($options);
 	}
 	$plugin_url = plugins_url('', dirname(__FILE__));
 	

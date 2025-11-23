@@ -91,14 +91,23 @@ if (!defined('ABSPATH')) {
 		return $enhanced;
 	}
 
+
 	function get_multilang_available_languages() {
-		return get_option('multilang_container_languages', array('en'));
+		if (function_exists('multilang_get_options')) {
+			$options = multilang_get_options();
+			return isset($options['languages']) && is_array($options['languages']) ? $options['languages'] : array('en');
+		}
+		return array('en');
 	}
 
 	function get_multilang_default_language() {
-		$default = get_option('multilang_container_default_language', 'en');
-		$available = get_multilang_available_languages();
-		return in_array($default, $available) ? $default : (isset($available[0]) ? $available[0] : 'en');
+		if (function_exists('multilang_get_options')) {
+			$options = multilang_get_options();
+			$default = isset($options['default_language']) ? $options['default_language'] : 'en';
+			$available = get_multilang_available_languages();
+			return in_array($default, $available) ? $default : (isset($available[0]) ? $available[0] : 'en');
+		}
+		return 'en';
 	}
 
 	function multilang_get_current_language() {
