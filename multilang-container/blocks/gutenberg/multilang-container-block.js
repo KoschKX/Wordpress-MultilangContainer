@@ -1,8 +1,9 @@
 (function(wp){
 	const { registerBlockType } = wp.blocks;
 	const { TextControl, SelectControl, PanelBody, ColorPalette, RangeControl } = wp.components;
+
 	const { InspectorControls, useBlockProps, InnerBlocks } = wp.blockEditor;
-	const { useState } = wp.element;
+	const { useState, useEffect } = wp.element;
 
 	// Use dynamic language list from plugin settings
 	const LANGUAGES = (typeof multilangBlockSettings !== 'undefined' && Array.isArray(multilangBlockSettings.languages))
@@ -41,6 +42,25 @@
 			const blockProps = useBlockProps({
 				className: 'selected-lang-' + currentLang
 			});
+
+			// Hide .lang-xx sections for languages not in LANGUAGES
+			useEffect(() => {
+				// Get allowed language codes
+				const allowed = LANGUAGES.map(l => l.value);
+				// Find all elements with class lang-xx
+				document.querySelectorAll('[class*="lang-"]').forEach(el => {
+					const match = el.className.match(/lang-([a-zA-Z0-9_-]+)/);
+					if (match) {
+						const code = match[1];
+						if (!allowed.includes(code)) {
+							el.style.display = 'none';
+						} else {
+							el.style.display = '';
+						}
+					}
+				});
+			}, [currentLang, LANGUAGES]);
+
 			return wp.element.createElement(
 				wp.element.Fragment,
 				null,

@@ -13,6 +13,12 @@
         );
     }
 
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(function(){
+            jQuery('body').addClass('multilang-ready');
+        }, 0);
+    });
+
     if (document.body) {
         hideFilterEnabled = checkHideFilterStatus();
     } else {
@@ -583,7 +589,6 @@
 
         function translateText(text, sectionTranslations) {
             if (!text.trim()) return text;
-            
             if (translationCache[text]) {
                 return translationCache[text];
             }
@@ -599,43 +604,86 @@
             if (Object.keys(allTranslations).length > 0) {
                 var allSpans = '';
                 var hasCurrentLangTranslation = false;
-                
                 var defaultLangTranslation = allTranslations[defaultLang] || text;
-
                 availableLanguages.forEach(function(lang) {
                     var display = '';
                     if (!hideFilterEnabled) {
                         display = (lang === currentLang) ? '' : 'none';
                     }
-
                     if (lang === currentLang && allTranslations[lang]) {
                         hasCurrentLangTranslation = true;
                     }
-
                     var translation = allTranslations[lang] || defaultLangTranslation;
                     var encoded_content = encodeForDataAttr(translation);
-                    
                     if (hideFilterEnabled) {
                         allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '">' + translation + '</span>';
                     } else {
                         allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" style="display: ' + display + ';">' + translation + '</span>';
                     }
                 });
-
                 return allSpans || text;
             }
+
+            // --- PHRASE-BASED PARTIAL TRANSLATION ---
+            // Gather all possible phrases from translation data (for all languages)
+            var phraseSet = new Set();
+            availableLanguages.forEach(function(lang) {
+                var langTranslations = sectionTranslations[lang] || {};
+                Object.keys(langTranslations).forEach(function(key) {
+                    if (key.length > 1 && text.includes(key)) {
+                        phraseSet.add(key);
+                    }
+                });
+            });
+            // Sort phrases by length (longest first)
+            var phrases = Array.from(phraseSet).sort(function(a, b) { return b.length - a.length; });
+            var replaced = false;
+            var replacedText = text;
+            // Replace all found phrases with their translation spans
+            phrases.forEach(function(phrase) {
+                if (replacedText.includes(phrase)) {
+                    var phraseTranslations = {};
+                    availableLanguages.forEach(function(lang) {
+                        var langTranslations = sectionTranslations[lang] || {};
+                        if (langTranslations[phrase]) {
+                            phraseTranslations[lang] = langTranslations[phrase];
+                        }
+                    });
+                    if (Object.keys(phraseTranslations).length > 0) {
+                        var phraseSpans = '';
+                        var defaultPhraseTranslation = phraseTranslations[defaultLang] || phrase;
+                        availableLanguages.forEach(function(lang) {
+                            var display = '';
+                            if (!hideFilterEnabled) {
+                                display = (lang === currentLang) ? '' : 'none';
+                            }
+                            var translation = phraseTranslations[lang] || defaultPhraseTranslation;
+                            var encoded_content = encodeForDataAttr(translation);
+                            if (hideFilterEnabled) {
+                                phraseSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + phrase + '">' + translation + '</span>';
+                            } else {
+                                phraseSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + phrase + '" style="display: ' + display + ';">' + translation + '</span>';
+                            }
+                        });
+                        replacedText = replacedText.split(phrase).join(phraseSpans);
+                        replaced = true;
+                    }
+                }
+            });
+            if (replaced) {
+                translationCache[text] = replacedText;
+                return replacedText;
+            }
+            // --- END PHRASE-BASED PARTIAL TRANSLATION ---
 
             // Token-based fallback - check individual words but only in section translations
             var tokens = text.match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]+/gu) || [];
             var result = '';
             var lastIndex = 0;
             var hasAnyTranslation = false;
-
             tokens.forEach(function(token) {
                 var idx = text.indexOf(token, lastIndex);
                 if (idx > lastIndex) result += text.slice(lastIndex, idx);
-
-                // Check token in section translations for all languages
                 var tokenTranslations = {};
                 availableLanguages.forEach(function(lang) {
                     var langTranslations = sectionTranslations[lang] || {};
@@ -643,54 +691,35 @@
                         tokenTranslations[lang] = langTranslations[token];
                     }
                 });
-
                 if (Object.keys(tokenTranslations).length > 0) {
                     hasAnyTranslation = true;
                     var tokenSpans = '';
                     var hasCurrentLangTokenTranslation = false;
-                    
-                    // Get the clean token (without punctuation) for data-original-text
                     var originalToken = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-                    
-                    // Get default language translation for fallback
                     var defaultTokenTranslation = tokenTranslations[defaultLang] || token;
-
-                    // Create spans for ALL available languages (not just ones with translations)
                     availableLanguages.forEach(function(lang) {
                         var display = '';
                         if (!hideFilterEnabled) {
-                            // Only add display styles if hide filter is NOT active
                             display = (lang === currentLang) ? '' : 'none';
                         }
-
                         if (lang === currentLang && tokenTranslations[lang]) {
                             hasCurrentLangTokenTranslation = true;
                         }
-
-                        // Use actual translation if exists, otherwise use default language translation
                         var translation = tokenTranslations[lang] || defaultTokenTranslation;
                         var encoded_content = encodeForDataAttr(translation);
-
                         if (hideFilterEnabled) {
-                            // When hide filter is active, don't add display styles - let PHP handle it
                             tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '">' + translation + '</span>';
                         } else {
-                            // When hide filter is not active, use display styles
                             tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '" style="display: ' + display + ';">' + translation + '</span>';
                         }
                     });
-
                     result += tokenSpans || token;
                 } else {
                     result += token;
                 }
-
                 lastIndex = idx + token.length;
             });
-
             if (lastIndex < text.length) result += text.slice(lastIndex);
-            
-            // Cache the result before returning
             var finalResult = hasAnyTranslation ? result : text;
             translationCache[text] = finalResult;
             return finalResult;
@@ -984,6 +1013,10 @@
                             elements.forEach(function(el) {
                                 el.style.setProperty('visibility', 'visible', 'important');
                             });
+
+                            if(jQuery('body').hasClass('multilang-ready')){
+                                runTranslations();
+                            }
                         } catch (e) {
                             // Invalid selector, skip
                         }
