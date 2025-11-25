@@ -942,40 +942,59 @@ function multilang_css_to_xpath($selector) {
  */
 function multilang_process_partial_translation($text, $lang_data) {
     static $partial_cache = array();
-    
     $cache_key = md5($text . serialize($lang_data));
     if (isset($partial_cache[$cache_key])) {
         return $partial_cache[$cache_key];
     }
-    
     if (!is_array($lang_data)) {
         $partial_cache[$cache_key] = null;
         return null;
     }
-    
+
     $translated_text = $text;
     $found_translation = false;
-    
-    // Search through all categories for partial matches
+
+    // Gather all possible phrases/keys from all categories
+    $phrases = array();
     foreach ($lang_data as $category => $keys) {
         if (is_array($keys)) {
             foreach ($keys as $source => $translation) {
-                // Skip empty translations or non-string keys
-                if (empty(trim($translation)) || !is_string($source)) {
-                    continue;
-                }
-                
-                // Use Unicode word boundaries for better matching with special characters
-                // This will match "Sep" in "« Sep" or "Sep »"
-                $pattern = '/(?<=^|[\s\p{P}\p{Z}])' . preg_quote($source, '/') . '(?=[\s\p{P}\p{Z}]|$)/ui';
-                if (preg_match($pattern, $text)) {
-                    $translated_text = preg_replace($pattern, $translation, $translated_text);
-                    $found_translation = true;
+                if (!empty(trim($translation)) && is_string($source) && strlen($source) > 1 && strpos($text, $source) !== false) {
+                    $phrases[$source] = $translation;
                 }
             }
         }
     }
-    
+
+    // Sort phrases by length (longest first)
+    uksort($phrases, function($a, $b) { return strlen($b) - strlen($a); });
+
+    // Replace all found phrases in the text
+    foreach ($phrases as $source => $translation) {
+        if (strpos($translated_text, $source) !== false) {
+            $translated_text = str_replace($source, $translation, $translated_text);
+            $found_translation = true;
+        }
+    }
+
+    // Fallback: if nothing replaced, try word-boundary (old logic) for single words
+    if (!$found_translation) {
+        foreach ($lang_data as $category => $keys) {
+            if (is_array($keys)) {
+                foreach ($keys as $source => $translation) {
+                    if (empty(trim($translation)) || !is_string($source)) {
+                        continue;
+                    }
+                    $pattern = '/(?<=^|[\s\p{P}\p{Z}])' . preg_quote($source, '/') . '(?=[\s\p{P}\p{Z}]|$)/ui';
+                    if (preg_match($pattern, $translated_text)) {
+                        $translated_text = preg_replace($pattern, $translation, $translated_text);
+                        $found_translation = true;
+                    }
+                }
+            }
+        }
+    }
+
     $result = $found_translation ? $translated_text : null;
     $partial_cache[$cache_key] = $result;
     return $result;
