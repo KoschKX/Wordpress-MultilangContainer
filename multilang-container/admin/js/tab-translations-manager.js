@@ -1,6 +1,55 @@
+// Toggle section disabled/enabled state (global)
+function toggleSectionDisabled(category) {
+    var sectionBox = document.querySelector('.postbox[data-section="' + category + '"]');
+    if (!sectionBox) return;
+    var disabled = sectionBox.classList.toggle('section-disabled');
+    // Update button text
+    var btn = sectionBox.querySelector('.section-disable-btn');
+    if (btn) btn.textContent = disabled ? 'Enable Section' : 'Disable Section';
+    // Set all inputs in this section to readonly/disabled
+    sectionBox.querySelectorAll('input, textarea, select').forEach(function(input) {
+        if (!input.classList.contains('section-disable-btn')) {
+            input.disabled = disabled;
+        }
+    });
+}
+
 // Override form submission to send JSON
 document.addEventListener('DOMContentLoaded', function() {
     // Always show Save button after the form
+    // Add enable/disable toggle to each section
+    document.querySelectorAll('.postbox').forEach(function(sectionBox) {
+            // Always inject the enable/disable button next to the delete button in the header-right div
+            var headerRight = sectionBox.querySelector('.header-right');
+            if (headerRight && !headerRight.querySelector('.section-disable-btn')) {
+                var sanitizedName = sectionBox.getAttribute('data-section');
+                var disableBtn = document.createElement('button');
+                disableBtn.type = 'button';
+                disableBtn.className = 'button button-small section-disable-btn';
+                disableBtn.title = 'Disable/Enable section';
+                disableBtn.style.background = '#ffc107';
+                disableBtn.style.color = '#333';
+                disableBtn.style.border = 'none';
+                disableBtn.style.padding = '2px 8px';
+                disableBtn.style.fontSize = '11px';
+                disableBtn.style.marginRight = '6px';
+                var isDisabled = sectionBox.classList.contains('section-disabled');
+                disableBtn.textContent = isDisabled ? 'Enable Section' : 'Disable Section';
+                disableBtn.onclick = function(event) {
+                    event.stopPropagation();
+                    toggleSectionDisabled(sanitizedName);
+                };
+                headerRight.insertBefore(disableBtn, headerRight.firstChild);
+            }
+            // If section is disabled, set all inputs to disabled
+            if (sectionBox.classList.contains('section-disabled')) {
+                sectionBox.querySelectorAll('input, textarea, select').forEach(function(input) {
+                    if (!input.classList.contains('section-disable-btn')) {
+                        input.disabled = true;
+                    }
+                });
+            }
+    });
     var mainForm = document.getElementById('main-translations-form');
     if (mainForm && !document.getElementById('save-translations-btn')) {
         var saveBtnDiv = document.getElementById('save_btn_holder');
@@ -75,13 +124,17 @@ function buildTranslationsJSON() {
         var selectorInput = sectionBox.querySelector('input[name^="selectors["]');
         var methodInput = sectionBox.querySelector('input[name^="section_methods["]:checked');
         var collapsed = collapsible.style.display === 'none';
+        var disabled = sectionBox.classList.contains('section-disabled');
         result[category]['_selectors'] = selectorInput ? selectorInput.value : 'body';
         result[category]['_collapsed'] = collapsed;
         result[category]['_method'] = methodInput ? methodInput.value : 'server';
+        result[category]['_disabled'] = disabled;
         var hasKeys = false;
         sectionBox.querySelectorAll('.translation-row').forEach(function(row) {
             if (row.hasAttribute('data-deleted')) return; // Skip deleted keys
-            var key = row.getAttribute('data-key');
+            // Support textarea for key (HTML block)
+            var keyInput = row.querySelector('.key-name-input');
+            var key = keyInput ? keyInput.value : row.getAttribute('data-key');
             if (!key) return;
             hasKeys = true;
             result[category][key] = {};
@@ -98,6 +151,7 @@ function buildTranslationsJSON() {
         }
         // Always set _method for every section
         result[category]['_method'] = methodInput ? methodInput.value : 'server';
+        result[category]['_disabled'] = disabled;
     });
     return result;
 }
@@ -202,9 +256,13 @@ function saveCategoryInputs(category) {
     if (table) {
         table.querySelectorAll('.translation-input').forEach(function(input) {
             var key = input.getAttribute('data-key');
-            var hiddenInput = table.querySelector('.hidden-translation[data-lang="' + currentLang + '"]');
-            var targetHidden = table.querySelector('input[name="translations[' + category + '][' + key + '][' + currentLang + ']"]');
-            
+            // Find the hidden input by data-lang and key in name (for HTML keys)
+            var targetHidden = null;
+            table.querySelectorAll('input.hidden-translation[data-lang="' + currentLang + '"]').forEach(function(h) {
+                if (h.getAttribute('name') && h.getAttribute('name').includes(key)) {
+                    targetHidden = h;
+                }
+            });
             if (targetHidden) {
                 targetHidden.value = input.value;
             }
@@ -221,15 +279,22 @@ function updateCategoryDisplay(category, lang) {
         table.querySelectorAll('.translation-row').forEach(function(row) {
             var key = row.getAttribute('data-key');
             var input = row.querySelector('.translation-input');
-            var hiddenInput = row.querySelector('input[name="translations[' + category + '][' + key + '][' + lang + ']"]');
-            
+            // Find the hidden input by data-lang and key in name (for HTML keys)
+            var hiddenInput = null;
+            row.querySelectorAll('input.hidden-translation[data-lang="' + lang + '"]').forEach(function(h) {
+                if (h.getAttribute('name') && h.getAttribute('name').includes(key)) {
+                    hiddenInput = h;
+                }
+            });
             if (input && hiddenInput) {
                 var currentValue = hiddenInput.value || '';
-                
-                // If current language translation is empty and this isn't the default language,
-                // show the default language translation as fallback
                 if (!currentValue && lang !== defaultLanguage) {
-                    var defaultHiddenInput = row.querySelector('input[name="translations[' + category + '][' + key + '][' + defaultLanguage + ']"]');
+                    var defaultHiddenInput = null;
+                    row.querySelectorAll('input.hidden-translation[data-lang="' + defaultLanguage + '"]').forEach(function(h) {
+                        if (h.getAttribute('name') && h.getAttribute('name').includes(key)) {
+                            defaultHiddenInput = h;
+                        }
+                    });
                     if (defaultHiddenInput && defaultHiddenInput.value) {
                         input.value = defaultHiddenInput.value;
                         input.style.fontStyle = 'italic';
@@ -340,8 +405,8 @@ function addKeyToSection(category) {
     // Check if key already exists in this section
     var existingKeys = document.querySelectorAll('#category-' + category + ' .translation-row');
     for (var i = 0; i < existingKeys.length; i++) {
-        var existingKeyName = existingKeys[i].querySelector('td:first-child').textContent.trim();
-        if (existingKeyName === keyName) {
+        var existingKeyInput = existingKeys[i].querySelector('.key-name-input');
+        if (existingKeyInput && existingKeyInput.value.trim() === keyName) {
             alert('Key "' + keyName + '" already exists in this section.');
             return;
         }
@@ -402,40 +467,31 @@ function addKeyToSection(category) {
 
 // Helper function to create key row HTML
 function createKeyRowHtml(category, keyName, availableLanguages) {
-    var html = '<tr class="translation-row sortable-key-row" data-key="' + keyName + '">';
-    
-    // Column 1: Translation Key (match existing style exactly)
+    function htmlEscape(str) {
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    var safeKey = htmlEscape(keyName);
+    var html = '<tr class="translation-row sortable-key-row" data-key="' + safeKey + '">';
     html += '<td style="padding: 10px; vertical-align: middle; position: relative;">';
-    html += '<span class="key-drag-handle" title="Drag to reorder keys" style="display: inline-block; margin-right: 8px; cursor: move; color: #666; font-size: 14px; vertical-align: middle;">⋮⋮</span>';
-    html += '<input type="text" class="key-name-input" name="key_names[' + category + '][' + keyName + ']" ';
-    html += 'value="' + keyName + '" data-original-key="' + keyName + '" ';
-    html += 'style="font-weight: bold; background: transparent; border: 1px solid transparent; padding: 4px 6px; border-radius: 3px; width: auto; min-width: 80px;" ';
-    html += 'onblur="this.style.background=\'transparent\'; this.style.border=\'1px solid transparent\';" ';
-    html += 'onfocus="this.style.background=\'#fff\'; this.style.border=\'1px solid #ccd0d4\';" />';
+    html += '<span class="key-drag-handle" title="Drag to reorder keys" style="display: inline-block; margin-right: 0px; cursor: move; color: #666; font-size: 14px; vertical-align: middle;">⋮⋮</span>';
+    html += '<input type="text" class="key-name-input" name="key_names[' + category + '][' + safeKey + ']" value="' + safeKey + '" data-original-key="' + safeKey + '" style="width: calc(100% - 2.5em); font-weight: bold; background: transparent; border: 1px solid transparent; padding: 4px 6px; border-radius: 3px;" onblur="this.style.background=\'transparent\'; this.style.border=\'1px solid transparent\';" onfocus="this.style.background=\'#fff\'; this.style.border=\'1px solid #ccd0d4\';">';
     html += '</td>';
-    
-    // Column 2: Translation (input + hidden fields, match existing style exactly)
     html += '<td style="padding: 10px;">';
-    html += '<input type="text" class="translation-input widefat" data-key="' + keyName + '" ';
-    html += 'style="width: 100%; padding: 8px;" placeholder="Enter translation..." />';
-    
-    // Add hidden inputs for each language
+    html += '<input type="text" class="translation-input widefat" data-key="' + safeKey + '" style="width: 100%; padding: 8px; font-style: normal;" placeholder="Enter EN translation..." value="">';
     var langs = window.selectedLanguages && window.selectedLanguages.length ? window.selectedLanguages : availableLanguages;
     langs.forEach(function(lang) {
-        html += '<input type="hidden" class="hidden-translation" data-lang="' + lang + '" ';
-        html += 'name="translations[' + category + '][' + keyName + '][' + lang + ']" value="" />';
+        html += '<input type="hidden" class="hidden-translation" data-lang="' + lang + '" data-key="' + safeKey + '" name="translations[' + category + '][' + safeKey + '][' + lang + ']" value="" />';
     });
-    
     html += '</td>';
-    
-    // Column 3: Actions (match existing style exactly)
     html += '<td style="padding: 10px; vertical-align: middle;">';
-    html += '<button type="button" onclick="markForDeletion(\'' + category + '\', \'' + keyName + '\', this)" ';
-    html += 'class="button button-link-delete" style="color: #a00;">Delete</button>';
+    html += '<button type="button" onclick="markForDeletion(\'' + category + '\', \'' + safeKey + '\', this)" class="button button-link-delete" style="color: #a00;">Delete</button>';
     html += '</td>';
-    
     html += '</tr>';
-    
     return html;
 }
 
@@ -558,8 +614,8 @@ function createNewSectionHtml(sanitizedName, displayName) {
     html += '<span style="font-weight: normal; color: #666; margin-left: 10px;">(0 keys)</span>';
     html += '</div>';
     html += '<div class="header-right">';
+    html += '<button type="button" onclick="event.stopPropagation(); toggleSectionDisabled(\'' + sanitizedName + '\');" class="button button-small section-disable-btn" title="Disable/Enable section" style="background: #ffc107; color: #333; border: none; padding: 2px 8px; font-size: 11px; margin-right: 6px;">Disable Section</button>';
     html += '<button type="button" onclick="event.stopPropagation(); deleteSectionConfirm(\'' + sanitizedName + '\');" class="button button-small section-delete-btn" title="Delete entire section" style="background: #dc3545; color: white; border: none; padding: 2px 8px; font-size: 11px;">Delete Section</button>';
-    html += '</div>';
     html += '</div>';
     html += '</h2>';
     html += '<div class="collapsible-content" id="category-' + sanitizedName + '" style="display: block;">';
@@ -841,6 +897,7 @@ function updateLanguageDropdownsAndInputs() {
                 hidden.type = 'hidden';
                 hidden.className = 'hidden-translation';
                 hidden.setAttribute('data-lang', lang);
+                hidden.setAttribute('data-key', key);
                 hidden.name = 'translations[' + category + '][' + key + '][' + lang + ']';
                 hidden.value = (lang in existingValues) ? existingValues[lang] : '';
                 row.querySelector('td:nth-child(2)').appendChild(hidden);
@@ -861,7 +918,13 @@ window.addEventListener('selectedLanguagesChanged', function() {
             var needsLoad = false;
             table.querySelectorAll('.translation-row').forEach(function(row) {
                 var key = row.getAttribute('data-key');
-                var hidden = row.querySelector('input[name="translations[' + category + '][' + key + '][' + lang + ']"]');
+                // Find hidden input by data-lang and key in name
+                var hidden = null;
+                row.querySelectorAll('input.hidden-translation[data-lang="' + lang + '"]').forEach(function(h) {
+                    if (h.getAttribute('name') && h.getAttribute('name').includes(key)) {
+                        hidden = h;
+                    }
+                });
                 if (hidden && !hidden.value) {
                     needsLoad = true;
                 }
@@ -873,7 +936,13 @@ window.addEventListener('selectedLanguagesChanged', function() {
                     .then(function(data) {
                         table.querySelectorAll('.translation-row').forEach(function(row) {
                             var key = row.getAttribute('data-key');
-                            var hidden = row.querySelector('input[name="translations[' + category + '][' + key + '][' + lang + ']"]');
+                            // Find hidden input by data-lang and key in name
+                            var hidden = null;
+                            row.querySelectorAll('input.hidden-translation[data-lang="' + lang + '"]').forEach(function(h) {
+                                if (h.getAttribute('name') && h.getAttribute('name').includes(key)) {
+                                    hidden = h;
+                                }
+                            });
                             if (hidden && data[category] && data[category][key]) {
                                 hidden.value = data[category][key];
                                 // If this is the currently selected language, update the visible input

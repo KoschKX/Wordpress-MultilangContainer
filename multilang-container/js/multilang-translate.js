@@ -294,20 +294,20 @@
         
         Object.keys(structureData).forEach(function(sectionName) {
             var sectionConfig = structureData[sectionName];
+            // Skip disabled sections
+            if (sectionConfig && sectionConfig._disabled) return;
             if (sectionConfig && typeof sectionConfig === 'object' && sectionConfig['_selectors']) {
                 var sectionMethod = sectionConfig['_method'] || 'server';
                 if (sectionMethod === 'javascript') {
                     var selectors = sectionConfig['_selectors'];
                     if (Array.isArray(selectors) && selectors.length > 0) {
                         var selectorKey = selectors.join('|||');
-                        
                         if (!selectorGroups[selectorKey]) {
                             selectorGroups[selectorKey] = {
                                 selectors: selectors,
                                 sections: []
                             };
                         }
-                        
                         selectorGroups[selectorKey].sections.push(sectionName);
                     }
                 }
@@ -315,28 +315,26 @@
         });
 
         // Process each selector group (merge translations from all sections with same selectors)
+        // Get structureData for disabled check
+        var structureData = window.multilangLangBar && window.multilangLangBar.structureData ? window.multilangLangBar.structureData : {};
         Object.keys(selectorGroups).forEach(function(selectorKey) {
             var group = selectorGroups[selectorKey];
             var selectors = group.selectors;
             var sections = group.sections;
-            
-            // Merge translations from all sections in this group
+            // Merge translations from all sections in this group, but skip disabled sections
             var mergedTranslations = {};
-            
-            // Get all available languages
             var availableLanguages = [];
             if (window.multilangLangBar && window.multilangLangBar.languageFiles) {
                 availableLanguages = Object.keys(window.multilangLangBar.languageFiles);
             }
-            
             availableLanguages.forEach(function(lang) {
                 var langData = languageCache[lang] || {};
-                
                 if (!mergedTranslations[lang]) {
                     mergedTranslations[lang] = {};
                 }
-                
                 sections.forEach(function(sectionName) {
+                    var sectionConfig = structureData[sectionName];
+                    if (sectionConfig && sectionConfig._disabled) return; // skip disabled
                     if (langData[sectionName] && typeof langData[sectionName] === 'object') {
                         var sectionData = langData[sectionName];
                         Object.keys(sectionData).forEach(function(key) {
@@ -349,7 +347,6 @@
                     }
                 });
             });
-            
             if (Object.keys(mergedTranslations).length > 0) {
                 translateLang(mergedTranslations, selectors);
             }
@@ -572,11 +569,30 @@
             else if (t instanceof NodeList || Array.isArray(t)) elements = elements.concat(Array.from(t));
         });
 
+        // Per-selector processed marker: use a unique attribute for each selector group
+        const selectorMarker = 'data-multilang-processed-' + btoa(JSON.stringify(targets)).replace(/[^a-z0-9]/gi, '').toLowerCase();
         elements = elements.filter(el => {
-            return !excludedSelectors.some(sel => el.closest(sel)) &&
-                !el.closest('.multilang-wrapper') &&
-                !el.classList.contains('translate') &&
-                !el.hasAttribute('data-multilang-processed');
+            // Exclude if matches any excluded selectors
+            if (excludedSelectors.some(sel => el.closest(sel))) return false;
+            if (el.closest('.multilang-wrapper')) return false;
+            if (el.classList.contains('translate')) return false;
+            if (el.hasAttribute(selectorMarker)) return false;
+
+            // If el matches any selector, or any child matches, include it
+            let matchesSelector = false;
+            for (let t of targets) {
+                if (typeof t === 'string') {
+                    if (el.matches && el.matches(t)) {
+                        matchesSelector = true;
+                        break;
+                    }
+                    if (el.querySelector && el.querySelector(t)) {
+                        matchesSelector = true;
+                        break;
+                    }
+                }
+            }
+            return matchesSelector;
         });
         
         var translationCache = {};
@@ -589,141 +605,127 @@
 
         function translateText(text, sectionTranslations) {
             if (!text.trim()) return text;
-            if (translationCache[text]) {
-                return translationCache[text];
+            if (translationCache[text]) return translationCache[text];
+
+            // 1. Direct full-text translation
+            const allTranslations = {};
+            for (const lang of availableLanguages) {
+                const langTranslations = sectionTranslations[lang] || {};
+                if (langTranslations[text]) allTranslations[lang] = langTranslations[text];
             }
-
-            var allTranslations = {};
-            availableLanguages.forEach(function(lang) {
-                var langTranslations = sectionTranslations[lang] || {};
-                if (langTranslations[text]) {
-                    allTranslations[lang] = langTranslations[text];
-                }
-            });
-
-            if (Object.keys(allTranslations).length > 0) {
-                var allSpans = '';
-                var hasCurrentLangTranslation = false;
-                var defaultLangTranslation = allTranslations[defaultLang] || text;
-                availableLanguages.forEach(function(lang) {
-                    var display = '';
-                    if (!hideFilterEnabled) {
-                        display = (lang === currentLang) ? '' : 'none';
-                    }
-                    if (lang === currentLang && allTranslations[lang]) {
-                        hasCurrentLangTranslation = true;
-                    }
-                    var translation = allTranslations[lang] || defaultLangTranslation;
-                    var encoded_content = encodeForDataAttr(translation);
-                    if (hideFilterEnabled) {
-                        allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '">' + translation + '</span>';
-                    } else {
-                        allSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" style="display: ' + display + ';">' + translation + '</span>';
-                    }
-                });
+            if (Object.keys(allTranslations).length) {
+                const defaultLangTranslation = allTranslations[defaultLang] || text;
+                const allSpans = availableLanguages.map(lang => {
+                    const display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
+                    const translation = allTranslations[lang] || defaultLangTranslation;
+                    const encoded = encodeForDataAttr(translation);
+                    return hideFilterEnabled
+                        ? `<span class="translate lang-${lang}" data-translation="${encoded}">${translation}</span>`
+                        : `<span class="translate lang-${lang}" data-translation="${encoded}" style="display: ${display};">${translation}</span>`;
+                }).join('');
                 return allSpans || text;
             }
 
-            // --- PHRASE-BASED PARTIAL TRANSLATION ---
+            // 2. Phrase-based partial translation
             // Gather all possible phrases from translation data (for all languages)
-            var phraseSet = new Set();
-            availableLanguages.forEach(function(lang) {
-                var langTranslations = sectionTranslations[lang] || {};
-                Object.keys(langTranslations).forEach(function(key) {
-                    if (key.length > 1 && text.includes(key)) {
-                        phraseSet.add(key);
-                    }
-                });
-            });
-            // Sort phrases by length (longest first)
-            var phrases = Array.from(phraseSet).sort(function(a, b) { return b.length - a.length; });
-            var replaced = false;
-            var replacedText = text;
-            // Replace all found phrases with their translation spans
-            phrases.forEach(function(phrase) {
-                if (replacedText.includes(phrase)) {
-                    var phraseTranslations = {};
-                    availableLanguages.forEach(function(lang) {
-                        var langTranslations = sectionTranslations[lang] || {};
-                        if (langTranslations[phrase]) {
-                            phraseTranslations[lang] = langTranslations[phrase];
-                        }
-                    });
-                    if (Object.keys(phraseTranslations).length > 0) {
-                        var phraseSpans = '';
-                        var defaultPhraseTranslation = phraseTranslations[defaultLang] || phrase;
-                        availableLanguages.forEach(function(lang) {
-                            var display = '';
-                            if (!hideFilterEnabled) {
-                                display = (lang === currentLang) ? '' : 'none';
-                            }
-                            var translation = phraseTranslations[lang] || defaultPhraseTranslation;
-                            var encoded_content = encodeForDataAttr(translation);
-                            if (hideFilterEnabled) {
-                                phraseSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + phrase + '">' + translation + '</span>';
-                            } else {
-                                phraseSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + phrase + '" style="display: ' + display + ';">' + translation + '</span>';
-                            }
-                        });
-                        replacedText = replacedText.split(phrase).join(phraseSpans);
-                        replaced = true;
-                    }
+            const phraseSet = new Set();
+            for (const lang of availableLanguages) {
+                const langTranslations = sectionTranslations[lang] || {};
+                for (const key in langTranslations) {
+                    if (key && text.includes(key)) phraseSet.add(key);
                 }
+            }
+            // Sort phrases by length (longest first)
+            const phrases = Array.from(phraseSet).sort((a, b) => b.length - a.length);
+            let replaced = false;
+            let replacedText = text;
+            const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            for (const phrase of phrases) {
+                if (!replacedText.includes(phrase)) continue;
+                const phraseTranslations = {};
+                for (const lang of availableLanguages) {
+                    const langTranslations = sectionTranslations[lang] || {};
+                    if (langTranslations[phrase]) phraseTranslations[lang] = langTranslations[phrase];
+                }
+                if (!Object.keys(phraseTranslations).length) continue;
+                const defaultPhraseTranslation = phraseTranslations[defaultLang] || phrase;
+                const phraseSpans = availableLanguages.map(lang => {
+                    const display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
+                    const translation = phraseTranslations[lang] || defaultPhraseTranslation;
+                    const encoded = encodeForDataAttr(translation);
+                    return hideFilterEnabled
+                        ? `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${phrase}">${translation}</span>`
+                        : `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${phrase}" style="display: ${display};">${translation}</span>`;
+                }).join('');
+                replacedText = replacedText.replace(new RegExp(escapeRegExp(phrase), 'g'), phraseSpans);
+                replaced = true;
+            }
+
+            // 3. Translate all parenthesized content after phrase and token replacements
+            replacedText = replacedText.replace(/\(([^)]+)\)/g, (match, inner) => {
+                // Remove any HTML tags from inner (if already replaced by phrase logic)
+                const plainInner = inner.replace(/<[^>]+>/g, '').trim();
+                const innerTranslations = {};
+                for (const lang of availableLanguages) {
+                    const langTranslations = sectionTranslations[lang] || {};
+                    if (langTranslations[plainInner]) innerTranslations[lang] = langTranslations[plainInner];
+                }
+                if (Object.keys(innerTranslations).length) {
+                    const defaultInnerTranslation = innerTranslations[defaultLang] || plainInner;
+                    const innerSpans = availableLanguages.map(lang => {
+                        const display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
+                        const translation = innerTranslations[lang] || defaultInnerTranslation;
+                        const encoded = encodeForDataAttr(translation);
+                        return hideFilterEnabled
+                            ? `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${plainInner}">${translation}</span>`
+                            : `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${plainInner}" style="display: ${display};">${translation}</span>`;
+                    }).join('');
+                    return `(${innerSpans})`;
+                }
+                return match;
             });
             if (replaced) {
                 translationCache[text] = replacedText;
                 return replacedText;
             }
-            // --- END PHRASE-BASED PARTIAL TRANSLATION ---
 
-            // Token-based fallback - check individual words but only in section translations
-            var tokens = text.match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]+/gu) || [];
-            var result = '';
-            var lastIndex = 0;
-            var hasAnyTranslation = false;
-            tokens.forEach(function(token) {
-                var idx = text.indexOf(token, lastIndex);
+            // 4. Token-based fallback - check individual words but only in section translations
+            const tokens = text.match(/[\p{L}\p{N}]+|[^\p{L}\p{N}\s]+/gu) || [];
+            let result = '';
+            let lastIndex = 0;
+            let hasAnyTranslation = false;
+            for (const token of tokens) {
+                const idx = text.indexOf(token, lastIndex);
                 if (idx > lastIndex) result += text.slice(lastIndex, idx);
-                var tokenTranslations = {};
-                availableLanguages.forEach(function(lang) {
-                    var langTranslations = sectionTranslations[lang] || {};
-                    if (langTranslations[token]) {
-                        tokenTranslations[lang] = langTranslations[token];
-                    }
-                });
-                if (Object.keys(tokenTranslations).length > 0) {
+                const tokenTranslations = {};
+                for (const lang of availableLanguages) {
+                    const langTranslations = sectionTranslations[lang] || {};
+                    if (langTranslations[token]) tokenTranslations[lang] = langTranslations[token];
+                }
+                if (Object.keys(tokenTranslations).length) {
                     hasAnyTranslation = true;
-                    var tokenSpans = '';
-                    var hasCurrentLangTokenTranslation = false;
-                    var originalToken = token.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-                    var defaultTokenTranslation = tokenTranslations[defaultLang] || token;
-                    availableLanguages.forEach(function(lang) {
-                        var display = '';
-                        if (!hideFilterEnabled) {
-                            display = (lang === currentLang) ? '' : 'none';
-                        }
-                        if (lang === currentLang && tokenTranslations[lang]) {
-                            hasCurrentLangTokenTranslation = true;
-                        }
-                        var translation = tokenTranslations[lang] || defaultTokenTranslation;
-                        var encoded_content = encodeForDataAttr(translation);
-                        if (hideFilterEnabled) {
-                            tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '">' + translation + '</span>';
-                        } else {
-                            tokenSpans += '<span class="translate lang-' + lang + '" data-translation="' + encoded_content + '" data-original-text="' + originalToken + '" style="display: ' + display + ';">' + translation + '</span>';
-                        }
-                    });
-                    result += tokenSpans || token;
+                    const defaultTokenTranslation = tokenTranslations[defaultLang] || token;
+                    const tokenSpans = availableLanguages.map(lang => {
+                        const display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
+                        const translation = tokenTranslations[lang] || defaultTokenTranslation;
+                        const encoded = encodeForDataAttr(translation);
+                        return hideFilterEnabled
+                            ? `<span class=\"translate lang-${lang}\" data-translation=\"${encoded}\" data-original-text=\"${token}\">${translation}</span>`
+                            : `<span class=\"translate lang-${lang}\" data-translation=\"${encoded}\" data-original-text=\"${token}\" style=\"display: ${display};\">${translation}</span>`;
+                    }).join('');
+                    result += tokenSpans;
                 } else {
                     result += token;
                 }
                 lastIndex = idx + token.length;
-            });
-            if (lastIndex < text.length) result += text.slice(lastIndex);
-            var finalResult = hasAnyTranslation ? result : text;
-            translationCache[text] = finalResult;
-            return finalResult;
-        }
+            }
+            if (hasAnyTranslation) {
+                translationCache[text] = result;
+                return result;
+            }
+            return text;
+        // (no-op: removed old code after refactor)
+    }
 
         function wrapTextNodes(element) {
             const skipTags = ['SCRIPT', 'STYLE', 'CODE', 'PRE'];
@@ -739,6 +741,14 @@
             // CRITICAL FIX: Skip if we're already inside a multilang-wrapper or translate element
             if (element.closest('.multilang-wrapper') || element.closest('.translate')) {
                 return;
+            }
+
+            // Per-selector processed marker: prevent infinite recursion
+            if (typeof selectorMarker !== 'undefined' && element.hasAttribute(selectorMarker)) {
+                return;
+            }
+            if (typeof selectorMarker !== 'undefined') {
+                element.setAttribute(selectorMarker, 'true');
             }
 
             // Convert to array to prevent live NodeList issues
@@ -859,7 +869,6 @@
 
         // Process all elements at once for faster translation
         elements.forEach(function(el) {
-            el.setAttribute('data-multilang-processed', 'true');
             wrapTextNodes(el);
             // Override CSS visibility rule after translation
             el.style.setProperty('visibility', 'visible', 'important');
@@ -971,10 +980,11 @@
     function observeNewElements() {
         var structureData = window.multilangLangBar && window.multilangLangBar.structureData ? window.multilangLangBar.structureData : {};
         var jsSelectors = [];
-        
         // Get all selectors that use JavaScript translation
         Object.keys(structureData).forEach(function(sectionName) {
             var sectionConfig = structureData[sectionName];
+            // Skip disabled sections
+            if (sectionConfig && sectionConfig._disabled) return;
             if (sectionConfig && typeof sectionConfig === 'object') {
                 var sectionMethod = sectionConfig['_method'] || 'server';
                 if (sectionMethod === 'javascript' && sectionConfig['_selectors']) {
@@ -985,58 +995,63 @@
                 }
             }
         });
-        
+
+        // Remove duplicates and trim whitespace
+        jsSelectors = Array.from(new Set(jsSelectors.map(function(sel){ return sel.trim(); }))).filter(Boolean);
+
         if (jsSelectors.length === 0) return;
-        
+
         var observer = new MutationObserver(function(mutations) {
+            var shouldRunTranslations = false;
+            var processedNodes = new Set();
             mutations.forEach(function(mutation) {
                 mutation.addedNodes.forEach(function(node) {
                     if (node.nodeType !== Node.ELEMENT_NODE) return;
-                    
-                    // Check if this node or its children match any JS selectors
+
                     jsSelectors.forEach(function(selector) {
                         try {
                             var elements = [];
-                            
-                            // Check if the node itself matches
                             if (node.matches && node.matches(selector)) {
                                 elements.push(node);
                             }
-                            
-                            // Find matching children
                             if (node.querySelectorAll) {
                                 var children = node.querySelectorAll(selector);
                                 elements = elements.concat(Array.from(children));
                             }
-                            
-                            // Make them visible
                             elements.forEach(function(el) {
-                                el.style.setProperty('visibility', 'visible', 'important');
+                                if (!processedNodes.has(el)) {
+                                    el.style.setProperty('visibility', 'visible', 'important');
+                                    processedNodes.add(el);
+                                    shouldRunTranslations = true;
+                                }
                             });
-
-                            if(jQuery('body').hasClass('multilang-ready')){
-                                runTranslations();
-                            }
                         } catch (e) {
                             // Invalid selector, skip
                         }
                     });
                 });
             });
+            if (shouldRunTranslations) {
+                runTranslations();
+            }
         });
-        
+
         observer.observe(document.body, {
             childList: true,
             subtree: true
         });
     }
     
+
     // Initialize the observer after DOM is ready
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', observeNewElements);
+        document.addEventListener('DOMContentLoaded', function() {
+            observeNewElements();
+        });
     } else {
         observeNewElements();
     }
+
 
     // Remove invalid excerpts without translation
     function processExcerpt(p) {

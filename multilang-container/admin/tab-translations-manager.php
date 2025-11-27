@@ -246,8 +246,11 @@ function multilang_translations_tab_content() {
 					$selector = $structure_data['selector'] ?? '';
 					// Read collapsed state from JSON data
 					$is_collapsed = isset($structure_data['collapsed']) && $structure_data['collapsed'];
+					$is_disabled = isset($structure_data['_disabled']) && $structure_data['_disabled'];
+					$section_classes = 'postbox sortable-section';
+					if ($is_disabled) $section_classes .= ' section-disabled';
 				?>
-					<div class="postbox sortable-section" data-section="<?php echo esc_attr($category); ?>">
+					<div class="<?php echo esc_attr($section_classes); ?>" data-section="<?php echo esc_attr($category); ?>">
 						<!-- Collapsible Header -->
 						<h2 class="collapsible-header" onclick="toggleCollapse('category-<?php echo esc_attr($category); ?>')">
 							<div class="header-content">
@@ -341,22 +344,23 @@ function multilang_translations_tab_content() {
 									?>
 										<tr class="translation-row sortable-key-row" data-key="<?php echo esc_attr($key); ?>">
 											<td style="padding: 10px; vertical-align: middle; position: relative;">
-												<span class="key-drag-handle" title="Drag to reorder keys" style="display: inline-block; margin-right: 8px; cursor: move; color: #666; font-size: 14px; vertical-align: middle;">⋮⋮</span>
-												<input type="text" 
-													   class="key-name-input" 
-													   name="key_names[<?php echo esc_attr($category); ?>][<?php echo esc_attr($key); ?>]"
-													   value="<?php echo esc_attr($key); ?>"
-													   data-original-key="<?php echo esc_attr($key); ?>"
-													   style=""
-													   onblur="this.style.background='transparent'; this.style.border='1px solid transparent';"
-													   onfocus="this.style.background='#fff'; this.style.border='1px solid #ccd0d4';" />
+												<span class="key-drag-handle" title="Drag to reorder keys" style="display: inline-block; margin-right: 0px; cursor: move; color: #666; font-size: 14px; vertical-align: middle;">⋮⋮</span>
+												<input type="text"
+													class="key-name-input"
+													name="key_names[<?php echo esc_attr($category); ?>][<?php echo esc_attr($key); ?>]"
+													value="<?php echo htmlspecialchars($key, ENT_QUOTES, 'UTF-8'); ?>"
+													data-original-key="<?php echo esc_attr($key); ?>"
+													style="width: calc(100% - 2.5em);"
+													onblur="this.style.background='transparent'; this.style.border='1px solid transparent';"
+													onfocus="this.style.background='#fff'; this.style.border='1px solid #ccd0d4';" />
 											</td>
 											<td style="padding: 10px;">
 												<input type="text" 
-													   class="translation-input widefat" 
-													   data-key="<?php echo esc_attr($key); ?>"
-													   style="width: 100%; padding: 8px;"
-													   placeholder="Enter translation..." />
+													class="translation-input widefat" 
+													data-key="<?php echo esc_attr($key); ?>"
+													style="width: 100%; padding: 8px;"
+													placeholder="Enter translation..."
+													value="<?php echo esc_attr($lang_translations[$default_language] ?? ''); ?>" />
 												
 												<!-- Hidden inputs for each language -->
 												<?php foreach ($available_languages as $lang): ?>
@@ -656,6 +660,9 @@ function get_available_translation_sections() {
 		if (isset($meta['_method'])) {
 			$sections[$category]['structure']['_method'] = $meta['_method'];
 		}
+		if (isset($meta['_disabled'])) {
+			$sections[$category]['structure']['_disabled'] = $meta['_disabled'];
+		}
 	}
 
 	// Add keys from translations data
@@ -677,6 +684,9 @@ function get_available_translation_sections() {
 		}
 		if (isset($data['_method']) && !isset($sections[$category]['structure']['_method'])) {
 			$sections[$category]['structure']['_method'] = $data['_method'];
+		}
+		if (isset($data['_disabled']) && !isset($sections[$category]['structure']['_disabled'])) {
+			$sections[$category]['structure']['_disabled'] = $data['_disabled'];
 		}
 		// Extract translation keys (exclude meta keys)
 		$unordered_keys = array();

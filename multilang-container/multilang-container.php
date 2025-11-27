@@ -74,7 +74,7 @@ add_action('init', function() {
             
             add_action('send_headers', function() {
                 if (wp_doing_ajax()) {
-                    error_log('[Multilang] Sending no-cache headers for AJAX');
+                    // error_log('[Multilang] Sending no-cache headers for AJAX');
                     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0', true);
                     header('Pragma: no-cache', true);
                     header('Expires: 0', true);
@@ -84,12 +84,12 @@ add_action('init', function() {
             
             // Fix for "load more" showing duplicate posts
             add_action('wp_ajax_get_fusion_blog', function() {
-                error_log('[Multilang] wp_ajax_get_fusion_blog triggered - setting nocache_headers');
+                // error_log('[Multilang] wp_ajax_get_fusion_blog triggered - setting nocache_headers');
                 nocache_headers();
                 header('X-Multilang-Time: ' . time(), true);
             }, 0);
             add_action('wp_ajax_nopriv_get_fusion_blog', function() {
-                error_log('[Multilang] wp_ajax_nopriv_get_fusion_blog triggered - setting nocache_headers');
+                // error_log('[Multilang] wp_ajax_nopriv_get_fusion_blog triggered - setting nocache_headers');
                 nocache_headers();
                 header('X-Multilang-Time: ' . time(), true);
             }, 0);
