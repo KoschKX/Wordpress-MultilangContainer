@@ -308,12 +308,11 @@ function multilang_process_text_for_translations($html, $translations, $current_
     // New concise debug output: log only normalized input and first 5 normalized keys
     $debug_keys_sample = [];
     $found_match = false;
-    // If we found a section match for an HTML key, only check that section for direct translation (normalized, full-block match only)
+    // Only check the matched section for direct translation (no cross-section fallback)
     if ($html_key_section_match) {
         foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
             if (isset($translations_set[$html_key_section_match]) && is_array($translations_set[$html_key_section_match])) {
                 foreach ($translations_set[$html_key_section_match] as $key => $val) {
-                    // Export only the concatenated child nodes of a dummy wrapper (no wrapper in output)
                     $get_inner_html = function($html) {
                         $doc = new DOMDocument();
                         libxml_use_internal_errors(true);
@@ -331,7 +330,6 @@ function multilang_process_text_for_translations($html, $translations, $current_
                         return trim($inner);
                     };
                     $norm_key_inner = $get_inner_html($key);
-                    // For the section: if it's a single element, unwrap and use only its inner HTML
                     $doc = new DOMDocument();
                     libxml_use_internal_errors(true);
                     $doc->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $extracted_section_html . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
@@ -339,13 +337,11 @@ function multilang_process_text_for_translations($html, $translations, $current_
                     $dummy = $doc->getElementsByTagName('dummy')->item(0);
                     $normalized_html_inner = '';
                     if ($dummy && $dummy->childNodes->length === 1 && $dummy->firstChild->nodeType === XML_ELEMENT_NODE) {
-                        // Unwrap: use only the inner HTML of the single element
                         $el = $dummy->firstChild;
                         foreach ($el->childNodes as $child) {
                             $normalized_html_inner .= $doc->saveHTML($child);
                         }
                     } else if ($dummy) {
-                        // Multiple nodes: concatenate all
                         foreach ($dummy->childNodes as $child) {
                             $normalized_html_inner .= $doc->saveHTML($child);
                         }
@@ -353,57 +349,14 @@ function multilang_process_text_for_translations($html, $translations, $current_
                         $normalized_html_inner = $extracted_section_html;
                     }
                     $normalized_html_inner = trim($normalized_html_inner);
-
-                    // DEBUG: Always save all normalized keys and originals, and save match if found
-                    $all_keys_debug = [];
-                    $found_match_debug = false;
-                    $matched_key = null;
-                    $matched_val = null;
-                    foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-                        foreach ($translations_set as $category => $keys) {
-                            if (!is_array($keys)) continue;
-                            foreach ($keys as $key => $val) {
-                                $norm_key_inner = $get_inner_html($key);
-                                $all_keys_debug[] = [
-                                    'original' => $key,
-                                    'normalized' => $norm_key_inner
-                                ];
-                                // Robust matching: strict, whitespace-insensitive, then regex substring
-                                $norm_key_ws = preg_replace('/\s+/', '', $norm_key_inner);
-                                $norm_html_ws = preg_replace('/\s+/', '', $normalized_html_inner);
-                                $matched = false;
-                                if ($norm_key_inner === $normalized_html_inner) {
-                                    $matched = true;
-                                } elseif ($norm_key_ws === $norm_html_ws) {
-                                    $matched = true;
-                                } elseif ($norm_key_inner && preg_match('/' . preg_quote($norm_key_inner, '/') . '/i', $normalized_html_inner)) {
-                                    $matched = true;
-                                }
-                                if ($matched) {
-                                    $found_match_debug = true;
-                                    $matched_key = $key;
-                                    $matched_val = $val;
-                                    @file_put_contents('/var/www/html/search4god/matching_key_for_normalized_html_inner.txt', "MATCHED KEY (original):\n" . $key . "\nMATCHED KEY (normalized):\n" . $norm_key_inner . "\nMATCHED VALUE (normalized_html_inner):\n" . $normalized_html_inner);
-                                    // Debug log for category, selector, and value
-                                    $debug_line = '[MATCH] Category: ' . $html_key_section_match . ' | Selector: (see structure.json) | Key: ' . $key . ' | Value: ' . $val;
-                                    @file_put_contents('/var/www/html/search4god/translation_debug.log', $debug_line . "\n", FILE_APPEND);
-                                }
-                            }
-                        }
-                    }
-                    // Always save all keys for inspection
-                    @file_put_contents('/var/www/html/search4god/all_normalized_keys_for_inner.txt', print_r($all_keys_debug, true));
-
-                    // If a match is found, replace the block's inner HTML with the translation value
-                    if ($found_match_debug && $matched_val !== null) {
+                    if ($norm_key_inner === $normalized_html_inner && !empty($val)) {
                         // Remove all children from the block
                         while ($el->firstChild) {
                             $el->removeChild($el->firstChild);
                         }
-                        // Insert the translation value as HTML
                         $tmp = new DOMDocument();
                         libxml_use_internal_errors(true);
-                        $tmp->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $matched_val . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                        $tmp->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $val . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                         libxml_clear_errors();
                         $dummy = $tmp->getElementsByTagName('dummy')->item(0);
                         if ($dummy) {
@@ -412,171 +365,15 @@ function multilang_process_text_for_translations($html, $translations, $current_
                                 $el->appendChild($imported);
                             }
                         }
-                    }
-                    $is_match = ($norm_key_inner === $normalized_html_inner);
-                    @file_put_contents('/var/www/html/search4god/normalized_section.html', $normalized_html_inner);
-                    @file_put_contents('/var/www/html/search4god/normalized_key.html', $norm_key_inner);
-                    if (count($debug_keys_sample) < 5) {
-                        $debug_keys_sample[] = $norm_key;
-                    }
-                    if ($is_match) {
-                        if (!empty($val)) {
-                            // Unwrap the translation value (use only its inner HTML)
-                            $val_inner = '';
-                            $doc_val = new DOMDocument();
-                            libxml_use_internal_errors(true);
-                            $doc_val->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $val . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                            libxml_clear_errors();
-                            $dummy_val = $doc_val->getElementsByTagName('dummy')->item(0);
-                            if ($dummy_val && $dummy_val->childNodes->length === 1 && $dummy_val->firstChild->nodeType === XML_ELEMENT_NODE) {
-                                $el = $dummy_val->firstChild;
-                                foreach ($el->childNodes as $child) {
-                                    $val_inner .= $doc_val->saveHTML($child);
-                                }
-                            } else if ($dummy_val) {
-                                foreach ($dummy_val->childNodes as $child) {
-                                    $val_inner .= $doc_val->saveHTML($child);
-                                }
-                            } else {
-                                $val_inner = $val;
-                            }
-                            $val_inner = trim($val_inner);
-
-
-                            // Update the DOM: replace the inner HTML of the matched selector with a multilang-wrapper
-                            $dom = new DOMDocument();
-                            libxml_use_internal_errors(true);
-                            $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                            libxml_clear_errors();
-
-                            // Helper to set inner HTML of a DOMElement, using the correct DOMDocument
-                            $set_inner_html = function($element, $html_fragment, $dom_for_import) {
-                                while ($element->firstChild) {
-                                    $element->removeChild($element->firstChild);
-                                }
-                                $tmp = new DOMDocument();
-                                libxml_use_internal_errors(true);
-                                $tmp->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $html_fragment . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                                libxml_clear_errors();
-                                $dummy = $tmp->getElementsByTagName('dummy')->item(0);
-                                if ($dummy) {
-                                    foreach ($dummy->childNodes as $child) {
-                                        $imported = $dom_for_import->importNode($child, true);
-                                        $element->appendChild($imported);
-                                    }
-                                }
-                            };
-
-                            // Update the DOM: replace the inner HTML of the matched selector with a multilang-wrapper
-                            $dom = new DOMDocument();
-                            libxml_use_internal_errors(true);
-                            $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                            libxml_clear_errors();
-                            $xpath = multilang_css_to_xpath($selector);
-                            if ($xpath) {
-                                $xp = new DOMXPath($dom);
-                                $elements = $xp->query($xpath);
-                                if ($elements && $elements->length > 0) {
-                                    foreach ($elements as $el) {
-                                        // Build the multilang-wrapper div with all language variants
-                                        $langs = get_multilang_available_languages();
-                                        $current_lang_code = $current_lang;
-                                        $wrapper_html = '<div class="multilang-wrapper" data-original-text="' . htmlspecialchars($norm_key_inner, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" data-default-text="">';
-                                        foreach ($langs as $lang) {
-                                            $lang_translations = isset($lang_cache[$lang]) ? $lang_cache[$lang] : multilang_get_language_data($lang);
-                                            $lang_val = null;
-                                            foreach ($lang_translations as $category => $keys) {
-                                                if (!is_array($keys)) continue;
-                                                foreach ($keys as $key => $val) {
-                                                    $lang_norm_key_inner = $get_inner_html($key);
-                                                    if ($lang_norm_key_inner === $norm_key_inner && !empty($val)) {
-                                                        // Unwrap translation value for this language
-                                                        $val_inner_lang = '';
-                                                        $doc_val_lang = new DOMDocument();
-                                                        libxml_use_internal_errors(true);
-                                                        $doc_val_lang->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $val . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                                                        libxml_clear_errors();
-                                                        $dummy_val_lang = $doc_val_lang->getElementsByTagName('dummy')->item(0);
-                                                        if ($dummy_val_lang && $dummy_val_lang->childNodes->length === 1 && $dummy_val_lang->firstChild->nodeType === XML_ELEMENT_NODE) {
-                                                            $el_lang = $dummy_val_lang->firstChild;
-                                                            foreach ($el_lang->childNodes as $child_lang) {
-                                                                $val_inner_lang .= $doc_val_lang->saveHTML($child_lang);
-                                                            }
-                                                        } else if ($dummy_val_lang) {
-                                                            foreach ($dummy_val_lang->childNodes as $child_lang) {
-                                                                $val_inner_lang .= $doc_val_lang->saveHTML($child_lang);
-                                                            }
-                                                        } else {
-                                                            $val_inner_lang = $val;
-                                                        }
-                                                        $lang_val = trim($val_inner_lang);
-                                                        break 2;
-                                                    }
-                                                }
-                                            }
-                                            if (!$lang_val) {
-                                                $lang_val = $val_inner;
-                                            }
-                                            $display = ($lang === $current_lang_code) ? '' : 'display:none;';
-                                            $wrapper_html .= '<div class="translate lang-' . htmlspecialchars($lang, ENT_QUOTES | ENT_HTML5, 'UTF-8') . '" style="' . $display . '">' . $lang_val . '</div>';
-                                        }
-                                        $wrapper_html .= '</div>';
-                                        $set_inner_html($el, $wrapper_html, $dom);
-                                    }
-                                    // Save the full HTML after replacement to preserve layout
-                                    $full_html = $dom->saveHTML();
-                                    // Remove only the XML encoding declaration, but keep the rest of the HTML structure
-                                    $full_html = preg_replace('/^<!DOCTYPE.+?>/', '', $full_html);
-                                    $full_html = preg_replace('/<\?xml.*?\?>/', '', $full_html);
-                                    $full_html = trim($full_html);
-                                    $direct_translation = $full_html;
-                                } else {
-                                    $direct_translation = $val_inner;
-                                }
-                            } else {
-                                $direct_translation = $val_inner;
-                            }
-                            $found_match = true;
-                            break 2;
-                        }
+                        $direct_translation = $doc->saveHTML($el);
+                        $found_match = true;
+                        break 2;
                     }
                 }
             }
         }
     }
-    // Fallback: search all sections if no match found (partial/fuzzy match for HTML keys)
-    if (!$found_match) {
-        foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            foreach ($translations_set as $category => $keys) {
-                if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-                if (!is_array($keys)) continue;
-                foreach ($keys as $key => $val) {
-                    // Skip keys from disabled sections
-                    if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-                    $norm_key = $normalize_html($key);
-                    if (count($debug_keys_sample) < 5) {
-                        $debug_keys_sample[] = $norm_key;
-                    }
-                    // Exact match
-                    if ($norm_key === $normalized_html) {
-                        if (!empty($val)) {
-                            $direct_translation = $val;
-                            $found_match = true;
-                            break 2;
-                        }
-                    }
-                    // Partial/fuzzy match: if key contains HTML and is a substring of normalized_html
-                    if (!$found_match && strpos($key, '<') !== false && strpos($key, '>') !== false) {
-                        if (strpos($normalized_html, $norm_key) !== false && !empty($val)) {
-                            $direct_translation = $val;
-                            $found_match = true;
-                            break 2;
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // No fallback: do not search other sections for matches
     // Always log debug info for troubleshooting
     if ($direct_translation) {
         // If a direct translation was made by DOM replacement, return the full HTML (layout preserved)
@@ -586,10 +383,15 @@ function multilang_process_text_for_translations($html, $translations, $current_
             // If no direct translation, fall through to partial translation below
         }
     }
+    // If a direct translation was found, do not process further for inline/partial translation
+    if ($direct_translation) {
+        return $direct_translation;
+    }
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
         return $html;
     }
-    
+
+    // Only use keys from the current section for inline/partial translation
     $dom = new DOMDocument();
     $dom->encoding = 'UTF-8';
     $dom->preserveWhiteSpace = true;
@@ -603,27 +405,23 @@ function multilang_process_text_for_translations($html, $translations, $current_
     }
 
     // Try to find the main selector(s) for this section from structure_data
-    $main_selectors = [];
+    $replacements_made = 0;
     if ($structure_data && is_array($structure_data)) {
+        $xpath = new DOMXPath($dom);
         foreach ($structure_data as $category => $config) {
             if (isset($config['_selectors']) && is_array($config['_selectors']) && isset($translations[$category])) {
                 foreach ($config['_selectors'] as $selector) {
-                    $main_selectors[] = $selector;
-                }
-            }
-        }
-    }
-
-    $replacements_made = 0;
-    if (!empty($main_selectors)) {
-        $xpath = new DOMXPath($dom);
-        foreach ($main_selectors as $selector) {
-            $xp = multilang_css_to_xpath($selector);
-            if ($xp) {
-                $elements = $xpath->query($xp);
-                if ($elements && $elements->length > 0) {
-                    foreach ($elements as $el) {
-                        $replacements_made += multilang_wrap_text_nodes($el, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
+                    $xp = multilang_css_to_xpath($selector);
+                    if ($xp) {
+                        $elements = $xpath->query($xp);
+                        if ($elements && $elements->length > 0) {
+                            foreach ($elements as $el) {
+                                // Always pass section name for wrapper logic, matching selective function
+                                $section_current_lang = isset($current_lang_translations[$category]) ? array($category => $current_lang_translations[$category]) : array();
+                                $section_default_lang = isset($default_lang_translations[$category]) ? array($category => $default_lang_translations[$category]) : array();
+                                $replacements_made += multilang_wrap_text_nodes($el, $section_current_lang, $section_default_lang, $current_lang, $default_lang, array(), $category);
+                            }
+                        }
                     }
                 }
             }
@@ -634,87 +432,71 @@ function multilang_process_text_for_translations($html, $translations, $current_
     }
 
     if ($replacements_made === 0) {
-        // Fallback: regex replace all translation keys inside the main selector(s) only, preserving HTML structure
-        $dom_fallback = new DOMDocument();
-        $dom_fallback->encoding = 'UTF-8';
-        libxml_use_internal_errors(true);
-        $dom_fallback->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-        libxml_clear_errors();
-        $xpath = new DOMXPath($dom_fallback);
-        $all_keys = [];
-        $all_vals = [];
-        foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            foreach ($translations_set as $category => $keys) {
-                // Strictly skip keys from disabled sections
-                if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) {
-                    continue;
-                }
-                if (!is_array($keys)) continue;
-                foreach ($keys as $key => $val) {
-                    // Double-check: skip if this key is from a disabled section
-                    if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) {
-                        continue;
-                    }
-                    if (!empty($key) && !empty($val)) {
-                        $all_keys[] = $key;
-                        $all_vals[] = $val;
-                    }
-                }
-            }
-        }
-        array_multisort(array_map('strlen', $all_keys), SORT_DESC, $all_keys, $all_vals);
-        // Find main selectors from structure_data
-        $main_selectors = [];
+        // Fallback: regex replace all translation keys inside each section's selectors only, preserving HTML structure
+        $did_replace = false;
         if ($structure_data && is_array($structure_data)) {
+            $dom_fallback = new DOMDocument();
+            $dom_fallback->encoding = 'UTF-8';
+            libxml_use_internal_errors(true);
+            $dom_fallback->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            libxml_clear_errors();
+            $xpath = new DOMXPath($dom_fallback);
             foreach ($structure_data as $category => $config) {
                 if (isset($config['_selectors']) && is_array($config['_selectors']) && isset($translations[$category])) {
-                    foreach ($config['_selectors'] as $selector) {
-                        $main_selectors[] = $selector;
+                    // Collect all keys/vals for this section only
+                    $all_keys = [];
+                    $all_vals = [];
+                    foreach ([$current_lang_translations[$category] ?? [], $default_lang_translations[$category] ?? []] as $keys) {
+                        if (!is_array($keys)) continue;
+                        foreach ($keys as $key => $val) {
+                            if (!empty($key) && !empty($val)) {
+                                $all_keys[] = $key;
+                                $all_vals[] = $val;
+                            }
+                        }
                     }
-                }
-            }
-        }
-        $did_replace = false;
-        if (!empty($main_selectors) && !empty($all_keys)) {
-            foreach ($main_selectors as $selector) {
-                $xp = multilang_css_to_xpath($selector);
-                if ($xp) {
-                    $elements = $xpath->query($xp);
-                    if ($elements && $elements->length > 0) {
-                        foreach ($elements as $el) {
-                            // Recursively walk text nodes and regex replace keys
-                            $walker = function($node) use (&$walker, $all_keys, $all_vals, &$did_replace) {
-                                if ($node->nodeType === XML_TEXT_NODE) {
-                                    $orig = $node->nodeValue;
-                                    $replaced = $orig;
-                                    foreach ($all_keys as $i => $k) {
-                                        $replaced = preg_replace('/' . preg_quote($k, '/') . '/u', $all_vals[$i], $replaced, -1, $count);
-                                        if ($count > 0) $did_replace = true;
-                                    }
-                                    if ($replaced !== $orig) {
-                                        $node->nodeValue = $replaced;
-                                    }
-                                } elseif ($node->hasChildNodes()) {
-                                    foreach ($node->childNodes as $child) {
-                                        $walker($child);
-                                    }
+                    array_multisort(array_map('strlen', $all_keys), SORT_DESC, $all_keys, $all_vals);
+                    foreach ($config['_selectors'] as $selector) {
+                        $xp = multilang_css_to_xpath($selector);
+                        if ($xp) {
+                            $elements = $xpath->query($xp);
+                            if ($elements && $elements->length > 0) {
+                                foreach ($elements as $el) {
+                                    // Recursively walk text nodes and regex replace keys for this section only
+                                    $walker = function($node) use (&$walker, $all_keys, $all_vals, &$did_replace) {
+                                        if ($node->nodeType === XML_TEXT_NODE) {
+                                            $orig = $node->nodeValue;
+                                            $replaced = $orig;
+                                            foreach ($all_keys as $i => $k) {
+                                                $replaced = preg_replace('/' . preg_quote($k, '/') . '/u', $all_vals[$i], $replaced, -1, $count);
+                                                if ($count > 0) $did_replace = true;
+                                            }
+                                            if ($replaced !== $orig) {
+                                                $node->nodeValue = $replaced;
+                                            }
+                                        } elseif ($node->hasChildNodes()) {
+                                            foreach ($node->childNodes as $child) {
+                                                $walker($child);
+                                            }
+                                        }
+                                    };
+                                    $walker($el);
                                 }
-                            };
-                            $walker($el);
+                            }
                         }
                     }
                 }
             }
-        }
-        if ($did_replace) {
             $result = $dom_fallback->saveHTML();
             $result = preg_replace('/^<!DOCTYPE.+?>/', '<!DOCTYPE html>', str_replace('<?xml encoding="UTF-8">', '', $result));
-            if (!is_string($result) || strlen(trim($result)) === 0 || strpos($result, '<') === false) {
-                return $html;
+            if ($did_replace && is_string($result) && strlen(trim($result)) > 0 && strpos($result, '<') !== false) {
+                return $result;
             }
-            return $result;
+            return $html;
+        } else {
+            // Fallback: walk the whole body
+            $replacements_made = multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
         }
-        return $html;
     }
     $result = $dom->saveHTML();
     $result = preg_replace('/^<!DOCTYPE.+?>/', '<!DOCTYPE html>', str_replace('<?xml encoding="UTF-8">', '', $result));
@@ -817,40 +599,30 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
     }
     $current_translation = multilang_find_translation_in_data($trimmed_text, $current_lang_translations);
     $default_translation = multilang_find_translation_in_data($trimmed_text, $default_lang_translations);
-    
+
     $default_partial_translation = null;
     if (!$default_translation && strlen($trimmed_text) <= 50) {
         $default_partial_translation = multilang_process_partial_translation($trimmed_text, $default_lang_translations);
     }
-    
-    if (strlen($trimmed_text) > 50 && !$current_translation && !$default_translation && !$default_partial_translation) {
-        $cache[$cache_key] = $text;
-        return $leading_space . $text . $trailing_space;
-    }
-    
+
+    // Only process if a translation exists in the current section (no cross-section fallback)
     $should_process = $current_translation || $default_translation || $default_partial_translation;
-    
-    $has_section_specific = !empty($current_lang_translations) && is_array($current_lang_translations) && count($current_lang_translations) > 0;
-    
-    if (!$should_process && !$has_section_specific) {
-        $should_process = multilang_text_contains_translatable_words($trimmed_text);
-    }
-    
+
     if ($should_process) {
         if ($langs === null) {
             $langs = get_multilang_available_languages();
         }
-        
+
         $full_result = '';
-        
-        $best_fallback = $default_translation ? $default_translation : 
+
+        $best_fallback = $default_translation ? $default_translation :
                         ($default_partial_translation ? $default_partial_translation : $trimmed_text);
-        
+
         foreach ($langs as $lang) {
             // Get the full language file data for this language
             $lang_file_data = multilang_get_language_data($lang);
             $lang_data = array();
-            
+
             // Extract only the sections that are in current_lang_translations
             if (is_array($current_lang_translations)) {
                 foreach ($current_lang_translations as $category => $translations) {
@@ -861,30 +633,30 @@ function multilang_translate_text($text, $current_lang_translations, $default_la
                     }
                 }
             }
-            
+
             // If no section-specific data, use the full language file
             if (empty($lang_data)) {
                 $lang_data = $lang_file_data;
             }
-            
+
             $lang_translation = multilang_find_translation_in_data($trimmed_text, $lang_data);
-            
+
             if (!$lang_translation && strlen($trimmed_text) <= 50) {
                 $lang_translation = multilang_process_partial_translation($trimmed_text, $lang_data);
             }
-            
+
             if (!$lang_translation) {
                 $full_result .= '<span class="translate lang-' . esc_attr($lang) . '">' . esc_html($best_fallback) . '</span>';
             } else {
                 $full_result .= '<span class="translate lang-' . esc_attr($lang) . '">' . esc_html($lang_translation) . '</span>';
             }
         }
-        
+
         $result = !empty($full_result) ? $full_result : $text;
         $cache[$cache_key] = $result;
         return $leading_space . $result . $trailing_space;
     }
-    
+
     $cache[$cache_key] = $text;
     return $text;
 }
@@ -1379,7 +1151,6 @@ function multilang_process_entire_page($html) {
 
     // Get structure data and selectors
     $structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
-    $force_footer_translation = true;
     if (!$structure_data || !is_array($structure_data)) {
         // Fallback: process whole page
         if (function_exists('multilang_server_side_translate')) {
@@ -1401,7 +1172,6 @@ function multilang_process_entire_page($html) {
         }
     }
 
-    $footer_translated = false;
     if (function_exists('multilang_inject_fragments_into_html')) {
         // For each section/selector, try to get cached fragment
         list($fragments, $all_found) = multilang_retrieve_cached_fragments($cache_page_key, $structure_data);
@@ -1418,25 +1188,6 @@ function multilang_process_entire_page($html) {
                     $result_html = multilang_server_side_translate($html);
                 } else {
                     $result_html = $html;
-                }
-            }
-            // Check if footer is present and translated
-            if ($force_footer_translation && strpos($result_html, 'class="multilang-wrapper"') === false && strpos($result_html, '<footer') !== false) {
-                // Fallback: process footer element directly
-                $dom = new DOMDocument();
-                $dom->encoding = 'UTF-8';
-                libxml_use_internal_errors(true);
-                $dom->loadHTML('<?xml encoding="UTF-8">' . $result_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                libxml_clear_errors();
-                $footer = $dom->getElementsByTagName('footer')->item(0);
-                if ($footer) {
-                    $current_lang = multilang_get_current_language();
-                    $default_lang = get_multilang_default_language();
-                    $current_lang_translations = multilang_get_language_data($current_lang);
-                    $default_lang_translations = multilang_get_language_data($default_lang);
-                    multilang_wrap_text_nodes($footer, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
-                    $result_html = $dom->saveHTML();
-                    $footer_translated = true;
                 }
             }
             return $result_html;
