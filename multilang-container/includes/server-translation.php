@@ -4,12 +4,12 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// If cache-handler isn't available, load language data from file
+// Load language data from file if cache-handler is not available
 function load_language_data($lang) {
     $base_dir = dirname(__FILE__) . '/../languages/';
     $file = $base_dir . $lang . '.json';
     if (!file_exists($file)) {
-        // Try old uploads location
+        // Check old uploads location for language file
         $uploads_dir = dirname(__FILE__) . '/../../../uploads/multilang/';
         $old_file = $uploads_dir . $lang . '.json';
         if (file_exists($old_file)) {
@@ -58,7 +58,7 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
         }
     }
     
-    // Use force_lang if provided, otherwise use the current language
+    // Use force_lang if set, otherwise use current language
     $current_lang = $force_lang ?: $current_lang_cache;
     
     if ($translations === null) {
@@ -72,7 +72,7 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
         return $content;
     }
     
-    // If structure data is available, remove disabled sections from translations before processing
+    // Remove disabled sections from translations if structure data is available
     $structure_data = false;
     if (function_exists('multilang_get_cached_structure_data')) {
         $structure_data = multilang_get_cached_structure_data();
@@ -92,10 +92,21 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
 }
 
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
+    // Set up structure data if not already done
+    static $structure_data = null;
+    if ($structure_data === null) {
+        if (function_exists('multilang_get_cached_structure_data')) {
+            $structure_data = multilang_get_cached_structure_data();
+        } else if (function_exists('load_structure_data')) {
+            $structure_data = load_structure_data();
+        } else {
+            $structure_data = false;
+        }
+    }
     if (empty($translations) || strlen($html) < 100) {
         return $html; // Early return if translations are empty or HTML is too short
     }
-    // Remove all keys from disabled sections globally
+    // Remove translation keys from disabled sections
     static $structure_data_patch = null;
     if ($structure_data_patch === null) {
         if (function_exists('multilang_get_cached_structure_data')) {
@@ -129,25 +140,10 @@ function multilang_process_text_for_translations($html, $translations, $current_
     $current_lang_translations = $lang_cache[$current_lang];
     $default_lang_translations = $lang_cache[$default_lang];
 
-    // --- DIRECT HTML BLOCK TRANSLATION (with DOM-based normalization) ---
-    // Ensure $structure_data is always initialized before use
-    static $structure_data_initialized = false;
-    // static $structure_data = null; // Removed duplicate declaration
-    if (!$structure_data_initialized) {
-        if (function_exists('multilang_get_cached_structure_data')) {
-            $structure_data = multilang_get_cached_structure_data();
-        } else if (function_exists('load_structure_data')) {
-            $structure_data = load_structure_data();
-        } else {
-            $structure_data = false;
-        }
-        $structure_data_initialized = true;
-    }
-
-    $normalize_html = function($str, $strip_div = false) {
-        $str = str_replace(['\\/', '\/'], '/', $str);
+    // Direct HTML block translation using DOM normalization
+    $normalize_html = function($str) {
+        $str = str_replace(['\/', '\/'], '/', $str);
         $str = str_replace('\\', '/', $str);
-        $str = str_replace('"', '"', $str);
         $str = html_entity_decode($str, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $doc = new DOMDocument();
         libxml_use_internal_errors(true);
@@ -158,109 +154,71 @@ function multilang_process_text_for_translations($html, $translations, $current_
         $normalized = html_entity_decode($normalized, ENT_QUOTES | ENT_HTML5, 'UTF-8');
         $normalized = preg_replace('/>\s+</', '><', $normalized);
         $normalized = trim($normalized);
-        $normalized = str_replace(['\\/', '\/'], '/', $normalized);
+        $normalized = str_replace(['\/', '\/'], '/', $normalized);
         $normalized = str_replace('\\', '/', $normalized);
-        if ($strip_div && strpos($normalized, '<div>') === 0 && substr($normalized, -6) === '</div>') {
-            $normalized = substr($normalized, 5, -6);
-        }
         return $normalized;
     };
 
-    // Patch: If a translation key contains HTML, extract and normalize only the relevant section(s) before matching
-    $extracted_section_html = null;
-    $normalized_html = null;
-    $html_key_section_match = null;
-    if ($structure_data && is_array($structure_data)) {
-        foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            foreach ($translations_set as $category => $keys) {
-                $is_disabled = ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']);
-                // Skip keys from disabled sections
-                if ($is_disabled) {
-                    continue;
-                }
-                if (!is_array($keys)) continue;
-                foreach ($keys as $key => $val) {
-                    // Double-check: skip if this key is from a disabled section
-                    if ($is_disabled) {
-                        continue;
-                    }
-                    if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
-                        // Skip keys from disabled sections
-                        if ($is_disabled) {
-                            continue;
-                        }
-                        if (isset($structure_data[$category]['_selectors']) && is_array($structure_data[$category]['_selectors'])) {
-                            foreach ($structure_data[$category]['_selectors'] as $selector) {
-                                $dom = new DOMDocument();
-                                libxml_use_internal_errors(true);
-                                $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                                libxml_clear_errors();
-                                $xpath = multilang_css_to_xpath($selector);
-                                if ($xpath) {
-                                    $xp = new DOMXPath($dom);
-                                    $elements = $xp->query($xpath);
-                                    if ($elements && $elements->length > 0) {
-                                        $section_htmls = [];
-                                        foreach ($elements as $el) {
-                                            $section_htmls[] = $dom->saveHTML($el);
-                                        }
-                                        $extracted_section_html = implode("\n", $section_htmls);
-                                        $normalized_html = $normalize_html($extracted_section_html, true);
-                                        $html_key_section_match = $category;
-                                        break 4;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    // Skip block matching for very large input
+    if (strlen($html) > 100000) {
+        // Large input: skip block matching
     }
-    // Fallback: if no section extracted, normalize the whole HTML as before
-    if ($normalized_html === null) {
-        $normalized_html = $normalize_html($html);
-    }
+
     $direct_translation = null;
-    // Enhancement: If a translation key contains HTML, check for a match in the section selectors using regex
-    $html_key_section_match = null;
+    // Split input into <div> blocks for matching
+    $blocks = [];
+    if (preg_match_all('/<div[\s>][\s\S]*?<\/div>/i', $html, $matches)) {
+        $blocks = $matches[0];
+    } else {
+        // If no <div> blocks, treat whole input as one block
+        $blocks = [$html];
+    }
+
     if ($structure_data && is_array($structure_data)) {
         foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
             foreach ($translations_set as $category => $keys) {
-                // Skip keys from disabled sections
                 if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
                 if (!is_array($keys)) continue;
                 foreach ($keys as $key => $val) {
-                    // Double-check: skip if this key is from a disabled section
-                    if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-                    // Only process if the key contains HTML
                     if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
-                        // For each selector in this section, check for a regex match
-                        if (isset($structure_data[$category]['_selectors']) && is_array($structure_data[$category]['_selectors'])) {
-                            foreach ($structure_data[$category]['_selectors'] as $selector) {
-                                // Class selector
-                                if (strpos($selector, '.') === 0) {
-                                    $class = preg_quote(substr($selector, 1), '/');
-                                    if (preg_match('/class=["\"][^"\"]*' . $class . '\b/', $html)) {
-                                        $html_key_section_match = $category;
-                                        break 3;
-                                    }
+                        $normalized_key = $normalize_html($key);
+                        // Strict exact HTML phrase matching using preg_quote
+                        $pattern = preg_quote($normalized_key, '#');
+                        foreach ($blocks as $block) {
+                            $normalized_input = $normalize_html($block);
+                            $match = preg_match('#' . $pattern . '#u', $normalized_input);
+                            // Partial HTML match: use the longest text node from the key
+                            $partial = '';
+                            if (preg_match_all('/>([^<>]{10,})</u', $normalized_key, $text_matches)) {
+                                $longest = '';
+                                foreach ($text_matches[1] as $txt) {
+                                    if (mb_strlen($txt) > mb_strlen($longest)) $longest = $txt;
                                 }
-                                // Tag selector
-                                elseif (preg_match('/^[a-zA-Z0-9_-]+$/', $selector)) {
-                                    $tag = preg_quote($selector, '/');
-                                    if (preg_match('/<' . $tag . '\b/', $html)) {
-                                        $html_key_section_match = $category;
-                                        break 3;
-                                    }
+                                $partial = trim($longest);
+                            }
+                            // If no long text, try to use the first <a href=...> tag as partial
+                            if (!$partial) {
+                                if (preg_match('/<a [^>]*href=["\\\']([^"\\\']+)["\\\']/i', $normalized_key, $a_match)) {
+                                    $partial = '<a href="' . $a_match[1] . '"';
+                                } else {
+                                    $partial = mb_substr(strip_tags($normalized_key), 0, 30);
                                 }
-                                // ID selector
-                                elseif (strpos($selector, '#') === 0) {
-                                    $id = preg_quote(substr($selector, 1), '/');
-                                    if (preg_match('/id=["\"]' . $id . '\b/', $html)) {
-                                        $html_key_section_match = $category;
-                                        break 3;
-                                    }
+                            }
+                            $partial_found = $partial && (mb_stripos($normalized_input, $partial) !== false);
+                            // Optionally handle partial match debug
+                            if ($match || $partial_found) {
+                                if (!empty($val)) {
+                                    // Direct or partial translation triggered
+                                    $direct_translation = $val;
+                                    break 4;
+                                }
+                            } else {
+                                $lev = levenshtein($normalized_input, $normalized_key);
+                                // If very similar, allow fallback replacement
+                                if ($lev < 10 && !empty($val)) {
+                                    // Fallback: Levenshtein match, direct translation triggered
+                                    $direct_translation = $val;
+                                    break 4;
                                 }
                             }
                         }
@@ -269,123 +227,83 @@ function multilang_process_text_for_translations($html, $translations, $current_
             }
         }
     }
-    // Load structure data to check for disabled sections (declare and initialize before any use)
-    static $structure_data = null;
-    if ($structure_data === null) {
-        if (function_exists('multilang_get_cached_structure_data')) {
-            $structure_data = multilang_get_cached_structure_data();
-        } else if (function_exists('load_structure_data')) {
-            $structure_data = load_structure_data();
-        } else {
-            $structure_data = false;
-        }
-    }
-    // DEBUG: Log normalized HTML and all keys for user extraction and troubleshooting
-    $debug_normalized_keys = [];
-        $debug_raw_keys = []; // Initialize raw keys array
-    foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-        foreach ($translations_set as $category => $keys) {
-            if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-            if (!is_array($keys)) continue;
-            foreach ($keys as $key => $val) {
-                // If the key contains HTML, normalize it with strip_div=true to match extracted section normalization
-                $norm_key = (strpos($key, '<') !== false && strpos($key, '>') !== false)
-                    ? $normalize_html($key, true)
-                    : $normalize_html($key);
-                $debug_normalized_keys[] = $norm_key;
-                $debug_raw_keys[] = $key;
+    if ($direct_translation) {
+        // Always wrap in <span class="multilang-wrapper"> and <div class="translate lang-xx">
+        // Gather all translations for this fragment
+        $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
+        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
+        $translations = [];
+        $data_translation = [];
+        $data_default_text = '';
+        foreach ($all_langs as $lang) {
+            $lang_class = 'lang-' . htmlspecialchars($lang);
+            $lang_val = $direct_translation;
+            // Try to get the translation for this language using the original key
+            if (function_exists('multilang_get_language_data')) {
+                $lang_data = multilang_get_language_data($lang);
+                foreach ($lang_data as $cat => $keys) {
+                    if (isset($keys[$key])) {
+                        $lang_val = $keys[$key];
+                        break;
+                    }
+                }
             }
+            if ($lang === $default_lang) {
+                $data_default_text = $lang_val;
+            }
+            $data_translation[$lang] = $lang_val;
+            $translations[] = '<div class=\'translate ' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</div>';
         }
+        $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
+        $wrapped = '<div class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</div>';
+        return $wrapped;
     }
-    // error_log('[multilang] Normalized HTML: ' . $normalized_html);
-    // error_log('[multilang] Normalized keys: ' . json_encode($debug_normalized_keys));
-    // error_log('[multilang] Raw keys: ' . json_encode($debug_raw_keys));
-    // error_log('[multilang] Input HTML: ' . $html);
-    // Also output as HTML comment for easier inspection in page source
-    // if (isset($_GET['multilang_debug']) || (defined('MULTILANG_DEBUG') && MULTILANG_DEBUG)) {
-    //    echo "\n<!-- multilang debug: normalized_html='" . htmlspecialchars($normalized_html) . "'\nnormalized_keys='" . htmlspecialchars(json_encode($debug_normalized_keys)) . "'\nraw_keys='" . htmlspecialchars(json_encode($debug_raw_keys)) . "'\ninput_html='" . htmlspecialchars($html) . "'\n-->\n";
-    // }
-    // New concise debug output: log only normalized input and first 5 normalized keys
-    $debug_keys_sample = [];
-    $found_match = false;
-    // Only check the matched section for direct translation (no cross-section fallback)
-    if ($html_key_section_match) {
+
+    // Fallback: check the entire HTML fragment if no block-wise match was found
+    if ($structure_data && is_array($structure_data)) {
         foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            if (isset($translations_set[$html_key_section_match]) && is_array($translations_set[$html_key_section_match])) {
-                foreach ($translations_set[$html_key_section_match] as $key => $val) {
-                    $get_inner_html = function($html) {
-                        $doc = new DOMDocument();
-                        libxml_use_internal_errors(true);
-                        $doc->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $html . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                        libxml_clear_errors();
-                        $dummy = $doc->getElementsByTagName('dummy')->item(0);
-                        $inner = '';
-                        if ($dummy) {
-                            foreach ($dummy->childNodes as $child) {
-                                $inner .= $doc->saveHTML($child);
+            foreach ($translations_set as $category => $keys) {
+                if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
+                if (!is_array($keys)) continue;
+                foreach ($keys as $key => $val) {
+                    if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
+                        $normalized_key = $normalize_html($key);
+                        $normalized_input = $normalize_html($html);
+                        $pattern = preg_quote($normalized_key, '#');
+                        $match = preg_match('#' . $pattern . '#u', $normalized_input);
+                        if ($match && !empty($val)) {
+                            // Direct translation triggered
+                            $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
+                            $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
+                            $translations = [];
+                            $data_translation = [];
+                            $data_default_text = '';
+                            foreach ($all_langs as $lang) {
+                                $lang_class = 'lang-' . htmlspecialchars($lang);
+                                $lang_val = $val;
+                                if (function_exists('multilang_get_language_data')) {
+                                    $lang_data = multilang_get_language_data($lang);
+                                    foreach ($lang_data as $cat => $keys) {
+                                        if (isset($keys[$key])) {
+                                            $lang_val = $keys[$key];
+                                            break;
+                                        }
+                                    }
+                                }
+                                if ($lang === $default_lang) {
+                                    $data_default_text = $lang_val;
+                                }
+                                $data_translation[$lang] = $lang_val;
+                                $translations[] = '<div class=\'translate ' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</div>';
                             }
-                        } else {
-                            $inner = $html;
+                            $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
+                            $wrapped = '<div class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</div>';
+                            return $wrapped;
                         }
-                        return trim($inner);
-                    };
-                    $norm_key_inner = $get_inner_html($key);
-                    $doc = new DOMDocument();
-                    libxml_use_internal_errors(true);
-                    $doc->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $extracted_section_html . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                    libxml_clear_errors();
-                    $dummy = $doc->getElementsByTagName('dummy')->item(0);
-                    $normalized_html_inner = '';
-                    if ($dummy && $dummy->childNodes->length === 1 && $dummy->firstChild->nodeType === XML_ELEMENT_NODE) {
-                        $el = $dummy->firstChild;
-                        foreach ($el->childNodes as $child) {
-                            $normalized_html_inner .= $doc->saveHTML($child);
-                        }
-                    } else if ($dummy) {
-                        foreach ($dummy->childNodes as $child) {
-                            $normalized_html_inner .= $doc->saveHTML($child);
-                        }
-                    } else {
-                        $normalized_html_inner = $extracted_section_html;
-                    }
-                    $normalized_html_inner = trim($normalized_html_inner);
-                    if ($norm_key_inner === $normalized_html_inner && !empty($val)) {
-                        // Remove all children from the block
-                        while ($el->firstChild) {
-                            $el->removeChild($el->firstChild);
-                        }
-                        $tmp = new DOMDocument();
-                        libxml_use_internal_errors(true);
-                        $tmp->loadHTML('<?xml encoding="UTF-8"?><dummy>' . $val . '</dummy>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
-                        libxml_clear_errors();
-                        $dummy = $tmp->getElementsByTagName('dummy')->item(0);
-                        if ($dummy) {
-                            foreach ($dummy->childNodes as $newChild) {
-                                $imported = $doc->importNode($newChild, true);
-                                $el->appendChild($imported);
-                            }
-                        }
-                        $direct_translation = $doc->saveHTML($el);
-                        $found_match = true;
-                        break 2;
                     }
                 }
             }
         }
-    }
-    // No fallback: do not search other sections for matches
-    // Always log debug info for troubleshooting
-    if ($direct_translation) {
-        // If a direct translation was made by DOM replacement, return the full HTML (layout preserved)
-        if (is_string($direct_translation) && strlen(trim($direct_translation)) > 0 && strpos($direct_translation, '<') !== false) {
-            return $direct_translation;
-        } else {
-            // If no direct translation, fall through to partial translation below
-        }
-    }
-    // If a direct translation was found, do not process further for inline/partial translation
-    if ($direct_translation) {
-        return $direct_translation;
     }
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
         return $html;
@@ -432,7 +350,7 @@ function multilang_process_text_for_translations($html, $translations, $current_
     }
 
     if ($replacements_made === 0) {
-        // Fallback: regex replace all translation keys inside each section's selectors only, preserving HTML structure
+        // Fallback: robust HTML fragment replacement inside selectors with ultra-verbose debug logging
         $did_replace = false;
         if ($structure_data && is_array($structure_data)) {
             $dom_fallback = new DOMDocument();
@@ -458,29 +376,43 @@ function multilang_process_text_for_translations($html, $translations, $current_
                     array_multisort(array_map('strlen', $all_keys), SORT_DESC, $all_keys, $all_vals);
                     foreach ($config['_selectors'] as $selector) {
                         $xp = multilang_css_to_xpath($selector);
+                        // Selector and XPath info
                         if ($xp) {
                             $elements = $xpath->query($xp);
                             if ($elements && $elements->length > 0) {
                                 foreach ($elements as $el) {
-                                    // Recursively walk text nodes and regex replace keys for this section only
-                                    $walker = function($node) use (&$walker, $all_keys, $all_vals, &$did_replace) {
-                                        if ($node->nodeType === XML_TEXT_NODE) {
-                                            $orig = $node->nodeValue;
-                                            $replaced = $orig;
-                                            foreach ($all_keys as $i => $k) {
-                                                $replaced = preg_replace('/' . preg_quote($k, '/') . '/u', $all_vals[$i], $replaced, -1, $count);
-                                                if ($count > 0) $did_replace = true;
-                                            }
-                                            if ($replaced !== $orig) {
-                                                $node->nodeValue = $replaced;
-                                            }
-                                        } elseif ($node->hasChildNodes()) {
-                                            foreach ($node->childNodes as $child) {
-                                                $walker($child);
+                                    $orig_html = '';
+                                    foreach ($el->childNodes as $child) {
+                                        $orig_html .= $dom_fallback->saveHTML($child);
+                                    }
+                                    $normalized_html = $normalize_html($orig_html);
+                                    // Original and normalized HTML
+                                    foreach ($all_keys as $i => $k) {
+                                        $normalized_key = $normalize_html($k);
+                                        $pos = mb_strpos($normalized_html, $normalized_key);
+                                        if ($pos !== false) {
+                                            $pattern = '/' . preg_quote($k, '/') . '/u';
+                                            $replacement = '<span class="multilang-wrapper" data-multilang="1">' . $all_vals[$i] . '</span>';
+                                            $new_html = preg_replace($pattern, $replacement, $orig_html, 1, $count);
+                                            // Replacement made
+                                            if ($count > 0) {
+                                                $did_replace = true;
+                                                while ($el->firstChild) {
+                                                    $el->removeChild($el->firstChild);
+                                                }
+                                                $tmp_dom = new DOMDocument();
+                                                libxml_use_internal_errors(true);
+                                                $tmp_dom->loadHTML('<?xml encoding="UTF-8">' . $new_html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+                                                libxml_clear_errors();
+                                                $tmp_body = $tmp_dom->getElementsByTagName('body')->item(0);
+                                                if ($tmp_body) {
+                                                    foreach ($tmp_body->childNodes as $import) {
+                                                        $el->appendChild($dom_fallback->importNode($import, true));
+                                                    }
+                                                }
                                             }
                                         }
-                                    };
-                                    $walker($el);
+                                    }
                                 }
                             }
                         }
@@ -494,7 +426,6 @@ function multilang_process_text_for_translations($html, $translations, $current_
             }
             return $html;
         } else {
-            // Fallback: walk the whole body
             $replacements_made = multilang_wrap_text_nodes_selective($body, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
         }
     }
@@ -954,13 +885,97 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
         $child_nodes[] = $node;
     }
     
+    // --- NEW: Use DOM to reach selector, regex/string replace for HTML fragment translation ---
+    $html_keys = array();
+    foreach ([$current_lang_translations, $default_lang_translations] as $lang_translations) {
+        if (!is_array($lang_translations)) continue;
+        foreach ($lang_translations as $cat => $keys) {
+            if (!is_array($keys)) continue;
+            foreach ($keys as $key => $val) {
+                if (strpos($key, '<') !== false && strpos($key, '>') !== false && !empty($val)) {
+                    $html_keys[$key] = $val;
+                }
+            }
+        }
+    }
+
+    if (!empty($html_keys)) {
+        // Get inner HTML as string
+        $inner_html = '';
+        foreach ($child_nodes as $child) {
+            $inner_html .= $element->ownerDocument->saveHTML($child);
+        }
+        $replaced_html = $inner_html;
+        foreach ($html_keys as $frag => $replacement) {
+            // Always wrap the replacement in the required structure
+            $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
+            $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
+            $translations = [];
+            $data_translation = [];
+            $data_default_text = '';
+            foreach ($all_langs as $lang) {
+                $lang_class = 'lang-' . htmlspecialchars($lang);
+                $lang_val = $replacement;
+                if (function_exists('multilang_get_language_data')) {
+                    $lang_data = multilang_get_language_data($lang);
+                    foreach ($lang_data as $cat => $keys) {
+                        if (isset($keys[$frag])) {
+                            $lang_val = $keys[$frag];
+                            break;
+                        }
+                    }
+                }
+                if ($lang === $default_lang) {
+                    $data_default_text = $lang_val;
+                }
+                $data_translation[$lang] = $lang_val;
+                $translations[] = '<div class=\'translate ' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</div>';
+            }
+            $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
+            $wrapped = '<div class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</div>';
+            // Try direct string replacement first
+            $count = 0;
+            $replaced_html = str_replace($frag, $wrapped, $replaced_html, $count);
+            if ($count > 0) {
+                $replacements_made += $count;
+                continue;
+            }
+            // Try regex replacement (ignore whitespace, allow flexible attribute order)
+            $pattern = '/' . preg_quote($frag, '/') . '/u';
+            $replaced_html2 = preg_replace($pattern, $wrapped, $replaced_html, -1, $count2);
+            if ($count2 > 0) {
+                $replacements_made += $count2;
+                $replaced_html = $replaced_html2;
+            }
+        }
+        // If any replacements were made, update the element's children
+        if ($replacements_made > 0) {
+            while ($element->firstChild) {
+                $element->removeChild($element->firstChild);
+            }
+            $tmp_doc = new DOMDocument();
+            $tmp_doc->encoding = 'UTF-8';
+            libxml_use_internal_errors(true);
+            $tmp_doc->loadHTML('<?xml encoding="UTF-8"?><div>' . $replaced_html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+            libxml_clear_errors();
+            $div = $tmp_doc->getElementsByTagName('div')->item(0);
+            if ($div) {
+                foreach ($div->childNodes as $new_child) {
+                    $imported = $element->ownerDocument->importNode($new_child, true);
+                    $element->appendChild($imported);
+                }
+            }
+        }
+    }
+
+    // Continue with text node and attribute translation as before
     foreach ($child_nodes as $node) {
         if ($node->nodeType === XML_TEXT_NODE) {
             $original_text = $node->nodeValue;
             if (empty(trim($original_text))) {
                 continue;
             }
-            
+
             $parent_element = $node->parentNode;
             while ($parent_element && $parent_element->nodeType === XML_ELEMENT_NODE) {
                 if ($parent_element->hasAttribute('class') && 
@@ -969,30 +984,39 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
                 }
                 $parent_element = $parent_element->parentNode;
             }
-            
+
             $translated = multilang_translate_text($original_text, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang);
-            
-            // Only wrap if translation contains language spans
+
+            // Only wrap if translation contains language spans (full match)
             if ($translated !== $original_text && strpos($translated, 'class="translate lang-') !== false) {
                 $wrapper_html = '<span class="multilang-wrapper" data-original-text="' . esc_attr(trim($original_text)) . '">' . $translated . '</span>';
-                
+
                 $temp_doc = new DOMDocument();
                 $temp_doc->encoding = 'UTF-8';
                 libxml_use_internal_errors(true);
                 $temp_doc->loadHTML('<?xml encoding="UTF-8"><div>' . $wrapper_html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
                 libxml_clear_errors();
-                
+
                 $temp_wrapper = $temp_doc->getElementsByTagName('span')->item(0);
                 if ($temp_wrapper) {
                     $imported_wrapper = $element->ownerDocument->importNode($temp_wrapper, true);
-                    
                     $element->replaceChild($imported_wrapper, $node);
+                    $replacements_made++;
+                }
+            } else {
+                // Try partial translation (replace any matching substring)
+                $partial_translated = multilang_process_partial_translation($original_text, $current_lang_translations);
+                if (!$partial_translated) {
+                    $partial_translated = multilang_process_partial_translation($original_text, $default_lang_translations);
+                }
+                if ($partial_translated && $partial_translated !== $original_text) {
+                    $node->nodeValue = $partial_translated;
                     $replacements_made++;
                 }
             }
         } elseif ($node->nodeType === XML_ELEMENT_NODE) {
             $replacements_made += multilang_wrap_text_nodes($node, $current_lang_translations, $default_lang_translations, $current_lang, $default_lang, $javascript_section_classes, $current_section);
-            
+
             // Translate common attributes for all elements
             foreach (array('title', 'data-title', 'alt') as $attr) {
                 if ($node->hasAttribute($attr)) {
@@ -1031,7 +1055,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
             }
         }
     }
-    
+
     return $replacements_made;
 }
 
@@ -1399,4 +1423,35 @@ if (isset($structure_data) && is_array($structure_data)) {
         }
     }
     unset($translations_set); // break reference
+}
+
+/**
+ * Apply partial translation to all text nodes in an HTML string
+ */
+function multilang_partial_translate_html($html, $lang_data) {
+    $doc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $doc->loadHTML('<div>' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    libxml_clear_errors();
+    $div = $doc->getElementsByTagName('div')->item(0);
+    if (!$div) return $html;
+    $walker = function($node) use (&$walker, $lang_data) {
+        if ($node->nodeType === XML_TEXT_NODE) {
+            $translated = multilang_process_partial_translation($node->nodeValue, $lang_data);
+            if ($translated && $translated !== $node->nodeValue) {
+                $node->nodeValue = $translated;
+            }
+        } elseif ($node->hasChildNodes()) {
+            foreach ($node->childNodes as $child) {
+                $walker($child);
+            }
+        }
+    };
+    $walker($div);
+    $result = $doc->saveHTML($div);
+    // Remove outer <div> if present
+    if (strpos($result, '<div>') === 0 && substr($result, -6) === '</div>') {
+        $result = substr($result, 5, -6);
+    }
+    return $result;
 }

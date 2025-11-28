@@ -25,7 +25,7 @@ function multilang_get_formatted_excerpt($post_id = null) {
         $current_lang = $default_lang;
     }
     
-    // Build the excerpt HTML with language wrappers
+    // Build excerpt HTML with language wrappers
     $formatted_excerpt = '<p class="multilang-wrapper">';
     $all_langs = array();
   
@@ -155,7 +155,7 @@ if (!function_exists('multilang_use_translated_excerpt')) {
     }
 }
 
-// Avada theme compatibility
+// Avada theme compatibility: override excerpt output
 function multilang_override_fusion_excerpt() {
     if (!function_exists('fusion_builder_get_post_content')) {
         function fusion_builder_get_post_content($page = '', $strip_html = 'yes', $amount = 285, $strip_shortcodes = false) {
