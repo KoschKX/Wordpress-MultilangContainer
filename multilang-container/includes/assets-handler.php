@@ -124,7 +124,8 @@ function multilang_container_enqueue_scripts() {
 			$selectors = array();
 			foreach ($structure_data as $section => $config) {
 				$section_method = isset($config['_method']) ? $config['_method'] : 'server';
-				if ($section_method === 'javascript' && isset($config['_selectors']) && is_array($config['_selectors'])) {
+				$is_disabled = isset($config['_disabled']) && $config['_disabled'];
+				if ($section_method === 'javascript' && !$is_disabled && isset($config['_selectors']) && is_array($config['_selectors'])) {
 					$selectors = array_merge($selectors, $config['_selectors']);
 				}
 			}

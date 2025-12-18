@@ -153,7 +153,7 @@ function multilang_get_cache($cache_key, $expiration = 3600) {
         }
     }
     
-    $cached_content = file_get_contents($cache_file);
+    $cached_content = @file_get_contents($cache_file);
     if ($cached_content === false) {
         return false;
     }
