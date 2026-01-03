@@ -806,9 +806,9 @@
             if (typeof selectorMarker !== 'undefined' && element.hasAttribute(selectorMarker)) {
                 return;
             }
-            if (typeof selectorMarker !== 'undefined') {
-                element.setAttribute(selectorMarker, 'true');
-            }
+            
+            // Track if any changes were made to this element
+            var elementModified = false;
 
             // FIRST: Try to match the entire element's innerHTML (for HTML content translations)
             // This handles cases where the translation key includes HTML markup
@@ -855,6 +855,10 @@
                     element.appendChild(wrapper);
                     
                     // Mark as processed and return early - don't process child nodes
+                    elementModified = true;
+                    if (typeof selectorMarker !== 'undefined') {
+                        element.setAttribute(selectorMarker, 'true');
+                    }
                     return;
                 }
             }
@@ -962,6 +966,7 @@
                         });
 
                         node.replaceWith(wrapper);
+                        elementModified = true;
                         // console.log('Created translation wrapper for:', originalText.substring(0, 30));
                     }
                 } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -976,6 +981,11 @@
                     });
                 }
             });
+            
+            // Only add the processed marker if we actually modified the element
+            if (elementModified && typeof selectorMarker !== 'undefined') {
+                element.setAttribute(selectorMarker, 'true');
+            }
         }
 
         // Process all elements at once for faster translation
