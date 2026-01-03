@@ -83,23 +83,52 @@ function multilang_filter_the_title($title, $post_id = null) {
 	$processing = true;
 	
 	try {
-		// Get current language
-		$lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : 'en';
-		
 		// Get multilang titles directly from post meta to avoid recursion
 		$multilang_titles = get_post_meta($post_id, '_multilang_titles', true);
 		
-		if (is_array($multilang_titles)) {
-			// Return translated title if exists
-			if (isset($multilang_titles[$lang]) && !empty($multilang_titles[$lang])) {
-				$processing = false;
-				return $multilang_titles[$lang];
+		if (is_array($multilang_titles) && !empty($multilang_titles)) {
+			// Get available languages
+			$available_languages = get_multilang_available_languages();
+			if (empty($available_languages)) {
+				$available_languages = array_keys($multilang_titles);
 			}
 			
-			// Fallback to English if current language not found
-			if ($lang !== 'en' && isset($multilang_titles['en']) && !empty($multilang_titles['en'])) {
+			// Get default language
+			$default_lang = get_option('multilang_container_default_language', 'en');
+			
+			// Check if hide filter is enabled
+			$hide_filter = get_option('multilang_container_hide_filter', false);
+			
+			// Build translation spans for all languages
+			$spans = array();
+			foreach ($available_languages as $language) {
+				$translated_title = isset($multilang_titles[$language]) && !empty($multilang_titles[$language]) 
+					? $multilang_titles[$language] 
+					: $title;
+				
+				// Encode for data attribute (matching the JS encoding)
+				$encoded = htmlspecialchars($translated_title, ENT_QUOTES, 'UTF-8');
+				
+				if ($hide_filter) {
+					$spans[] = sprintf(
+						'<span class="translate lang-%s" data-translation="%s">%s</span>',
+						esc_attr($language),
+						$encoded,
+						esc_html($translated_title)
+					);
+				} else {
+					$spans[] = sprintf(
+						'<span class="translate lang-%s" data-translation="%s">%s</span>',
+						esc_attr($language),
+						$encoded,
+						esc_html($translated_title)
+					);
+				}
+			}
+			
+			if (!empty($spans)) {
 				$processing = false;
-				return $multilang_titles['en'];
+				return '<span class="multilang-wrapper" data-original-text="' . esc_attr($title) . '">' . implode('', $spans) . '</span>';
 			}
 		}
 	} catch (Exception $e) {
@@ -110,6 +139,116 @@ function multilang_filter_the_title($title, $post_id = null) {
 	return $title;
 }
 add_filter('the_title', 'multilang_filter_the_title', 10, 2);
+
+/**
+ * Add translation data to title elements via JavaScript
+ */
+function multilang_add_title_translation_script() {
+	if (!is_singular()) {
+		return;
+	}
+	
+	global $post;
+	if (!$post) {
+		return;
+	}
+	
+	$multilang_titles = get_post_meta($post->ID, '_multilang_titles', true);
+	if (!is_array($multilang_titles) || empty($multilang_titles)) {
+		return;
+	}
+	
+	// Get original title
+	remove_filter('the_title', 'multilang_filter_the_title', 10);
+	$original_title = get_the_title($post->ID);
+	add_filter('the_title', 'multilang_filter_the_title', 10, 2);
+	
+	$available_languages = get_multilang_available_languages();
+	$hide_filter = get_option('multilang_container_hide_filter', false);
+	
+	?>
+	<script type="text/javascript">
+	(function() {
+		function wrapPostTitle() {
+			var titleSelectors = [
+				'.wp-block-post-title',
+				'h1.entry-title',
+				'h1.page-title',
+				'h1.post-title',
+				'.entry-header h1',
+				'article h1:first-child'
+			];
+			
+			var originalTitle = <?php echo wp_json_encode($original_title); ?>;
+			var translations = <?php echo wp_json_encode($multilang_titles); ?>;
+			var languages = <?php echo wp_json_encode($available_languages); ?>;
+			var hideFilter = <?php echo wp_json_encode($hide_filter); ?>;
+			
+			titleSelectors.forEach(function(selector) {
+				var elements = document.querySelectorAll(selector);
+				elements.forEach(function(element) {
+					// Skip if already wrapped
+					if (element.querySelector('.multilang-wrapper')) {
+						return;
+					}
+					
+					// Check if this element contains a title text
+					var elementText = element.textContent.trim();
+					var hasTitle = elementText === originalTitle;
+					
+					// Also check if it matches any translation
+					if (!hasTitle) {
+						for (var lang in translations) {
+							if (elementText === translations[lang]) {
+								hasTitle = true;
+								break;
+							}
+						}
+					}
+					
+					if (hasTitle) {
+						// Build translation spans
+						var spans = [];
+						languages.forEach(function(lang) {
+							var translation = translations[lang] || originalTitle;
+							var encoded = translation.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+							
+							var span = document.createElement('span');
+							span.className = 'translate lang-' + lang;
+							span.setAttribute('data-translation', encoded);
+							span.textContent = translation;
+							spans.push(span);
+						});
+						
+						// Create wrapper
+						var wrapper = document.createElement('span');
+						wrapper.className = 'multilang-wrapper';
+						wrapper.setAttribute('data-original-text', originalTitle);
+						
+						spans.forEach(function(span) {
+							wrapper.appendChild(span);
+						});
+						
+						// Replace element content
+						element.innerHTML = '';
+						element.appendChild(wrapper);
+						element.setAttribute('data-multilang-title', 'true');
+					}
+				});
+			});
+		}
+		
+		// Run on page load
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', wrapPostTitle);
+		} else {
+			wrapPostTitle();
+		}
+	})();
+	</script>
+	<?php
+}
+add_action('wp_footer', 'multilang_add_title_translation_script', 5);
 
 /**
  * Add classes to title elements for easier JavaScript targeting
