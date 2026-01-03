@@ -555,6 +555,7 @@
     function translateLang(sectionTranslations, targets) {
         targets = targets || ['body'];
         if (!sectionTranslations) {
+            console.warn('[Multilang] No section translations provided');
             return;
         }
 
@@ -571,12 +572,22 @@
 
         // Per-selector processed marker: use a unique attribute for each selector group
         const selectorMarker = 'data-multilang-processed-' + btoa(JSON.stringify(targets)).replace(/[^a-z0-9]/gi, '').toLowerCase();
+        
+        // Remove old generic processed marker to allow reprocessing
+        elements.forEach(function(el) {
+            if (el.hasAttribute('data-multilang-processed')) {
+                el.removeAttribute('data-multilang-processed');
+            }
+        });
+        
         elements = elements.filter(el => {
             // Exclude if matches any excluded selectors
             if (excludedSelectors.some(sel => el.closest(sel))) return false;
             if (el.closest('.multilang-wrapper')) return false;
             if (el.classList.contains('translate')) return false;
-            if (el.hasAttribute(selectorMarker)) return false;
+            if (el.hasAttribute(selectorMarker)) {
+                return false;
+            }
 
             // If el matches any selector, or any child matches, include it
             let matchesSelector = false;
@@ -629,30 +640,49 @@
             // 2. Phrase-based partial translation
             // Gather all possible phrases from translation data (for all languages)
             const phraseSet = new Set();
+            // Strip HTML tags for comparison but keep original text for replacement
+            const textForComparison = text.replace(/<[^>]+>/g, '').trim().replace(/\s+/g, ' ');
+            
             for (const lang of availableLanguages) {
                 const langTranslations = sectionTranslations[lang] || {};
                 for (const key in langTranslations) {
-                    if (key && text.includes(key)) phraseSet.add(key);
+                    // Normalize key for comparison
+                    const normalizedKey = key.trim().replace(/\s+/g, ' ');
+                    if (normalizedKey && textForComparison.includes(normalizedKey)) {
+                        phraseSet.add(key); // Keep original key for replacement
+                    }
                 }
             }
+            
             // Sort phrases by length (longest first)
             const phrases = Array.from(phraseSet).sort((a, b) => b.length - a.length);
             let replaced = false;
             let replacedText = text;
             const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
             for (const phrase of phrases) {
-                if (!replacedText.includes(phrase)) continue;
+                // Check if the phrase exists in the current text (accounting for already replaced portions)
+                const phrasePattern = new RegExp(escapeRegExp(phrase), 'g');
+                if (!phrasePattern.test(replacedText)) {
+                    continue;
+                }
+                
                 const phraseTranslations = {};
                 for (const lang of availableLanguages) {
                     const langTranslations = sectionTranslations[lang] || {};
                     if (langTranslations[phrase]) phraseTranslations[lang] = langTranslations[phrase];
                 }
-                if (!Object.keys(phraseTranslations).length) continue;
+                
+                if (!Object.keys(phraseTranslations).length) {
+                    continue;
+                }
+                
                 const defaultPhraseTranslation = phraseTranslations[defaultLang] || phrase;
                 const phraseSpans = availableLanguages.map(lang => {
                     const display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
                     const translation = phraseTranslations[lang] || defaultPhraseTranslation;
                     const encoded = encodeForDataAttr(translation);
+                    
                     return hideFilterEnabled
                         ? `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${phrase}">${translation}</span>`
                         : `<span class="translate lang-${lang}" data-translation="${encoded}" data-original-text="${phrase}" style="display: ${display};">${translation}</span>`;
@@ -1005,6 +1035,7 @@
             var shouldRunTranslations = false;
             var processedNodes = new Set();
             mutations.forEach(function(mutation) {
+                // Handle new nodes being added
                 mutation.addedNodes.forEach(function(node) {
                     if (node.nodeType !== Node.ELEMENT_NODE) return;
 
@@ -1030,6 +1061,34 @@
                         }
                     });
                 });
+
+                // Handle text/attribute changes (WooCommerce dynamic updates)
+                if (mutation.type === 'characterData' || mutation.type === 'childList') {
+                    var target = mutation.target.nodeType === Node.TEXT_NODE ? mutation.target.parentElement : mutation.target;
+                    if (target && target.nodeType === Node.ELEMENT_NODE) {
+                        jsSelectors.forEach(function(selector) {
+                            try {
+                                if (target.matches && target.matches(selector)) {
+                                    // Remove the processed marker so it can be re-translated
+                                    var allMarkerAttrs = Array.from(target.attributes).filter(function(attr) {
+                                        return attr.name.startsWith('data-multilang-processed-');
+                                    });
+                                    allMarkerAttrs.forEach(function(attr) {
+                                        target.removeAttribute(attr.name);
+                                    });
+                                    
+                                    if (!processedNodes.has(target)) {
+                                        target.style.setProperty('visibility', 'visible', 'important');
+                                        processedNodes.add(target);
+                                        shouldRunTranslations = true;
+                                    }
+                                }
+                            } catch (e) {
+                                // Invalid selector, skip
+                            }
+                        });
+                    }
+                }
             });
             if (shouldRunTranslations) {
                 runTranslations();
@@ -1038,7 +1097,9 @@
 
         observer.observe(document.body, {
             childList: true,
-            subtree: true
+            subtree: true,
+            characterData: true,
+            characterDataOldValue: false
         });
     }
     
