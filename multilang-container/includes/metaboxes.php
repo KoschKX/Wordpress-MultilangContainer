@@ -123,6 +123,14 @@ function multilang_metabox_callback($post) {
 
 function multilang_add_metabox_styles_and_scripts() {
 	echo '<style>
+	/* Force all metabox elements to be visible */
+	#multilang_metabox,
+	.multilang-metabox,
+	.multilang-editor,
+	.multilang-language-selector,
+	.multilang-input-section {
+		display: block !important;
+	}
 	.multilang-metabox {
 		font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 	}
