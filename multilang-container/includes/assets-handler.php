@@ -171,6 +171,18 @@ function multilang_container_enqueue_scripts() {
 		}
 	}
 	
+	// Get site tagline translations
+	$page_taglines = array();
+	$multilang_taglines = get_option('multilang_container_taglines', array());
+	if (is_array($multilang_taglines) && !empty($multilang_taglines)) {
+		$page_taglines = $multilang_taglines;
+		// Add original tagline
+		$page_taglines['original'] = get_bloginfo('description');
+	}
+	
+	// Get site name
+	$site_name = get_bloginfo('name');
+	
 	// Load individual language files for frontend
 	$languages = get_multilang_available_languages();
 	$individual_lang_data = array();
@@ -194,6 +206,8 @@ function multilang_container_enqueue_scripts() {
 		'pluginPath' => plugins_url('', dirname(__FILE__)),
 		'translations' => array(), // Empty to prevent conflicts with new system
 		'pageTitles' => $page_titles,
+		'pageTaglines' => $page_taglines,
+		'siteName' => $site_name,
 		'ajaxUrl' => admin_url('admin-ajax.php'),
 		'translationMethod' => $has_javascript_sections ? 'javascript' : 'server',
 		'structureData' => $structure_data,

@@ -240,83 +240,85 @@
 
 	// Function to update page title based on language
 	function updatePageTitle(lang) {
-		// Use the more reliable data source from wp_head
 		var titles = window.multilangPageTitles || (window.multilangLangBar && window.multilangLangBar.pageTitles);
+		var taglines = window.multilangPageTaglines || (window.multilangLangBar && window.multilangLangBar.pageTaglines);
+		var siteName = window.multilangLangBar && window.multilangLangBar.siteName;
 		
-		if (!titles) {
-			return;
-		}
+		console.log('updatePageTitle called with lang:', lang);
+		console.log('titles:', titles);
+		console.log('taglines:', taglines);
+		console.log('siteName:', siteName);
+		
 		var newTitle = '';
-		
-		// Try to get title in selected language
-		if (titles[lang]) {
+		if (titles && titles[lang]) {
 			newTitle = titles[lang];
 		}
-		// Fallback to English
-		else if (lang !== 'en' && titles['en']) {
+		else if (titles && lang !== 'en' && titles['en']) {
 			newTitle = titles['en'];
 		}
-		// Fallback to original title
-		else if (titles['original']) {
+		else if (titles && titles['original']) {
 			newTitle = titles['original'];
 		}
 		
-		// Update document title if we found a translation
-		if (newTitle) {
-			document.title = newTitle;
-			
-			// Also update any h1 elements that contain the title
-			updatePageHeadings(newTitle);
+		var newTagline = '';
+		if (taglines) {
+			if (taglines[lang]) {
+				newTagline = taglines[lang];
+			}
+			else if (lang !== 'en' && taglines['en']) {
+				newTagline = taglines['en'];
+			}
+			else if (taglines['original']) {
+				newTagline = taglines['original'];
+			}
 		}
+		
+		console.log('newTitle:', newTitle);
+		console.log('newTagline:', newTagline);
+		
+		// Build document title
+		var titleParts = [];
+		if (newTitle) {
+			titleParts.push(newTitle);
+		}
+		if (newTagline) {
+			titleParts.push(newTagline);
+		}
+		if (siteName) {
+			titleParts.push(siteName);
+		}
+		
+		if (titleParts.length > 0) {
+			document.title = titleParts.join(' - ');
+			console.log('Updated document.title to:', document.title);
+		}
+		
+		updatePageHeadings(newTitle, newTagline);
 	}
 
 	// Function to update page headings (h1, h2 with post titles)
-	function updatePageHeadings(newTitle) {
-		// First try elements with our data attribute
+	function updatePageHeadings(newTitle, newTagline) {
+		// Update title elements
 		var markedElements = document.querySelectorAll('[data-multilang-title="true"]');
 		if (markedElements.length > 0) {
 			markedElements.forEach(function(element) {
 				element.textContent = newTitle;
 			});
-			return;
 		}
 		
-		// Fallback to common title selectors
-		var titleSelectors = [
-			'h1.entry-title',
-			'h1.page-title', 
-			'h1.post-title',
-			'.entry-header h1',
-			'article h1:first-child',
-			'h1.wp-block-post-title',
-			'.post-title h1',
-			'.page-header h1'
-		];
-		
-		var originalTitle = (window.multilangPageTitles && window.multilangPageTitles.original) || 
-		                   (window.multilangLangBar && window.multilangLangBar.pageTitles && window.multilangLangBar.pageTitles.original) || '';
-		var updated = false;
-		
-		titleSelectors.forEach(function(selector) {
-			if (updated) return; // Only update the first match
-			
-			var elements = document.querySelectorAll(selector);
-			elements.forEach(function(element) {
-				var currentText = element.textContent.trim();
-				
-				// Check if this element contains the original title
-				if (originalTitle && (currentText === originalTitle || currentText.includes(originalTitle))) {
-					element.textContent = newTitle;
-					element.setAttribute('data-multilang-title', 'true'); // Mark for future updates
-					updated = true;
-				}
-			});
-		});
+		// Update tagline elements
+		if (newTagline) {
+			var taglineElements = document.querySelectorAll('.site-description, .site-tagline, [data-multilang-tagline="true"]');
+			if (taglineElements.length > 0) {
+				taglineElements.forEach(function(element) {
+					element.textContent = newTagline;
+				});
+			}
+		}
 	}
 
 	// Initialize page title on page load
 	var currentLang = window.getLangCookie() || 'en';
-	updatePageTitle(currentLang);
 
 	// Load CSS (style will be applied instantly since flags are full color by default)
 	var link = document.createElement('link');
