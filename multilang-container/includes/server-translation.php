@@ -159,150 +159,76 @@ function multilang_process_text_for_translations($html, $translations, $current_
         return $normalized;
     };
 
-    // Skip block matching for very large input
-    if (strlen($html) > 100000) {
-        // Large input: skip block matching
-    }
-
-    $direct_translation = null;
-    // Split input into <div> blocks for matching
-    $blocks = [];
-    if (preg_match_all('/<div[\s>][\s\S]*?<\/div>/i', $html, $matches)) {
-        $blocks = $matches[0];
+    // Skip block matching for very large input or full page content
+    // Don't try to match entire pages - this logic is for fragments only
+    $is_full_page = (strpos($html, '<html') !== false || strpos($html, '<body') !== false || strpos($html, '<!DOCTYPE') !== false);
+    if (strlen($html) > 100000 || $is_full_page) {
+        // Large input or full page: skip block matching, use DOM processing instead
     } else {
-        // If no <div> blocks, treat whole input as one block
-        $blocks = [$html];
-    }
-
-    if ($structure_data && is_array($structure_data)) {
-        foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            foreach ($translations_set as $category => $keys) {
-                if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-                if (!is_array($keys)) continue;
-                foreach ($keys as $key => $val) {
-                    if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
-                        $normalized_key = $normalize_html($key);
-                        // Strict exact HTML phrase matching using preg_quote
-                        $pattern = preg_quote($normalized_key, '#');
-                        foreach ($blocks as $block) {
-                            $normalized_input = $normalize_html($block);
+        // Only attempt direct HTML matching for small fragments (not full pages)
+        $direct_translation = null;
+        
+        if ($structure_data && is_array($structure_data)) {
+            foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
+                foreach ($translations_set as $category => $keys) {
+                    if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
+                    if (!is_array($keys)) continue;
+                    foreach ($keys as $key => $val) {
+                        if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
+                            $normalized_key = $normalize_html($key);
+                            $normalized_input = $normalize_html($html);
+                            
+                            // Only match if the fragment is roughly the same size (not entire page)
+                            $key_len = strlen($normalized_key);
+                            $input_len = strlen($normalized_input);
+                            
+                            // Skip if input is much larger than key (likely a full page, not a fragment)
+                            if ($input_len > $key_len * 3) {
+                                continue;
+                            }
+                            
+                            $pattern = preg_quote($normalized_key, '#');
                             $match = preg_match('#' . $pattern . '#u', $normalized_input);
-                            // Partial HTML match: use the longest text node from the key
-                            $partial = '';
-                            if (preg_match_all('/>([^<>]{10,})</u', $normalized_key, $text_matches)) {
-                                $longest = '';
-                                foreach ($text_matches[1] as $txt) {
-                                    if (mb_strlen($txt) > mb_strlen($longest)) $longest = $txt;
-                                }
-                                $partial = trim($longest);
-                            }
-                            // If no long text, try to use the first <a href=...> tag as partial
-                            if (!$partial) {
-                                if (preg_match('/<a [^>]*href=["\\\']([^"\\\']+)["\\\']/i', $normalized_key, $a_match)) {
-                                    $partial = '<a href="' . $a_match[1] . '"';
-                                } else {
-                                    $partial = mb_substr(strip_tags($normalized_key), 0, 30);
-                                }
-                            }
-                            $partial_found = $partial && (mb_stripos($normalized_input, $partial) !== false);
-                            // Optionally handle partial match debug
-                            if ($match || $partial_found) {
-                                if (!empty($val)) {
-                                    // Direct or partial translation triggered
-                                    $direct_translation = $val;
-                                    break 4;
-                                }
-                            } else {
-                                $lev = levenshtein($normalized_input, $normalized_key);
-                                // If very similar, allow fallback replacement
-                                if ($lev < 10 && !empty($val)) {
-                                    // Fallback: Levenshtein match, direct translation triggered
-                                    $direct_translation = $val;
-                                    break 4;
-                                }
+                            if ($match && !empty($val)) {
+                                // Direct translation triggered - but only for small fragments
+                                $direct_translation = $val;
+                                $direct_translation_key = $key;
+                                break 3;
                             }
                         }
                     }
                 }
             }
         }
-    }
-    if ($direct_translation) {
-        // Always wrap in <span class="multilang-wrapper"> and <div class="translate lang-xx">
-        // Gather all translations for this fragment
-        $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
-        $translations = [];
-        $data_translation = [];
-        $data_default_text = '';
-        foreach ($all_langs as $lang) {
-            $lang_class = 'lang-' . htmlspecialchars($lang);
-            $lang_val = $direct_translation;
-            // Try to get the translation for this language using the original key
-            if (function_exists('multilang_get_language_data')) {
-                $lang_data = multilang_get_language_data($lang);
-                foreach ($lang_data as $cat => $keys) {
-                    if (isset($keys[$key])) {
-                        $lang_val = $keys[$key];
-                        break;
-                    }
-                }
-            }
-            if ($lang === $default_lang) {
-                $data_default_text = $lang_val;
-            }
-            $data_translation[$lang] = $lang_val;
-            $translations[] = '<div class=\'translate ' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</div>';
-        }
-        $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
-        $wrapped = '<div class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</div>';
-        return $wrapped;
-    }
-
-    // Fallback: check the entire HTML fragment if no block-wise match was found
-    if ($structure_data && is_array($structure_data)) {
-        foreach ([$current_lang_translations, $default_lang_translations] as $translations_set) {
-            foreach ($translations_set as $category => $keys) {
-                if ($structure_data && isset($structure_data[$category]['_disabled']) && $structure_data[$category]['_disabled']) continue;
-                if (!is_array($keys)) continue;
-                foreach ($keys as $key => $val) {
-                    if (strpos($key, '<') !== false && strpos($key, '>') !== false) {
-                        $normalized_key = $normalize_html($key);
-                        $normalized_input = $normalize_html($html);
-                        $pattern = preg_quote($normalized_key, '#');
-                        $match = preg_match('#' . $pattern . '#u', $normalized_input);
-                        if ($match && !empty($val)) {
-                            // Direct translation triggered
-                            $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
-                            $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
-                            $translations = [];
-                            $data_translation = [];
-                            $data_default_text = '';
-                            foreach ($all_langs as $lang) {
-                                $lang_class = 'lang-' . htmlspecialchars($lang);
-                                $lang_val = $val;
-                                if (function_exists('multilang_get_language_data')) {
-                                    $lang_data = multilang_get_language_data($lang);
-                                    foreach ($lang_data as $cat => $keys) {
-                                        if (isset($keys[$key])) {
-                                            $lang_val = $keys[$key];
-                                            break;
-                                        }
-                                    }
-                                }
-                                if ($lang === $default_lang) {
-                                    $data_default_text = $lang_val;
-                                }
-                                $data_translation[$lang] = $lang_val;
-                                $translations[] = '<div class=\'translate ' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</div>';
-                            }
-                            $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
-                            $wrapped = '<div class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</div>';
-                            return $wrapped;
+        
+        if ($direct_translation) {
+            // Always wrap in <span class="multilang-wrapper"> and <div class="translate lang-xx">
+            $all_langs = function_exists('get_multilang_available_languages') ? get_multilang_available_languages() : [$current_lang];
+            $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : $current_lang;
+            $translations = [];
+            $data_translation = [];
+            $data_default_text = '';
+            foreach ($all_langs as $lang) {
+                $lang_class = 'lang-' . htmlspecialchars($lang);
+                $lang_val = $direct_translation;
+                if (function_exists('multilang_get_language_data')) {
+                    $lang_data = multilang_get_language_data($lang);
+                    foreach ($lang_data as $cat => $keys) {
+                        if (isset($keys[$direct_translation_key])) {
+                            $lang_val = $keys[$direct_translation_key];
+                            break;
                         }
                     }
                 }
+                if ($lang === $default_lang) {
+                    $data_default_text = $lang_val;
+                }
+                $data_translation[$lang] = $lang_val;
+                $translations[] = '<span class=\'translate lang-' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</span>';
             }
+            $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
+            $wrapped = '<span class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</span>';
+            return $wrapped;
         }
     }
     if (empty($current_lang_translations) && empty($default_lang_translations)) {
@@ -733,12 +659,15 @@ function multilang_wrap_text_nodes_selective($body, $current_lang_translations, 
                             $class_name = substr($sel, 1);
                             if (!in_array($class_name, $current_section_classes)) {
                                 $javascript_section_classes[] = $class_name;
+                                error_log('[Multilang Server] Added JS section class to skip: ' . $class_name . ' from section: ' . $other_section);
                             }
                         }
                     }
                 }
             }
         }
+        
+        error_log('[Multilang Server] Processing section: ' . $section . ' | JS classes to skip: ' . implode(', ', $javascript_section_classes));
         
         foreach ($section_xpaths as $sel) {
             $matching_elements = $xpath->query($sel, $body);
@@ -847,6 +776,7 @@ function multilang_wrap_text_nodes($element, $current_lang_translations, $defaul
     if (!empty($javascript_section_classes) && $element_has_class) {
         foreach ($javascript_section_classes as $js_class) {
             if (strpos($element_classes, $js_class) !== false) {
+                error_log('[Multilang Server] Skipping element with JS class: ' . $js_class . ' | Element classes: ' . $element_classes);
                 return 0;
             }
         }

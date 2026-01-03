@@ -616,13 +616,28 @@
 
         function translateText(text, sectionTranslations) {
             if (!text.trim()) return text;
+            
+            // CRITICAL: Don't translate text that already contains translation spans
+            if (text.includes('<span') || text.includes('data-translation')) {
+                return text;
+            }
+            
             if (translationCache[text]) return translationCache[text];
 
-            // 1. Direct full-text translation
+            // 1. Direct full-text translation (try exact match first, including HTML)
             const allTranslations = {};
             for (const lang of availableLanguages) {
                 const langTranslations = sectionTranslations[lang] || {};
-                if (langTranslations[text]) allTranslations[lang] = langTranslations[text];
+                // Try exact match with HTML
+                if (langTranslations[text]) {
+                    allTranslations[lang] = langTranslations[text];
+                } else {
+                    // Try stripping HTML from text and matching against keys
+                    const textWithoutHTML = text.replace(/<[^>]+>/g, '').trim();
+                    if (langTranslations[textWithoutHTML]) {
+                        allTranslations[lang] = langTranslations[textWithoutHTML];
+                    }
+                }
             }
             if (Object.keys(allTranslations).length) {
                 const defaultLangTranslation = allTranslations[defaultLang] || text;
@@ -773,12 +788,75 @@
                 return;
             }
 
+            // Skip if this element's direct children already contain translation spans (server-side translated)
+            // But only check direct children, not descendants, to allow processing siblings
+            let hasDirectTranslationChild = false;
+            for (let i = 0; i < element.children.length; i++) {
+                const child = element.children[i];
+                if (child.classList.contains('multilang-wrapper') || child.classList.contains('translate')) {
+                    hasDirectTranslationChild = true;
+                    break;
+                }
+            }
+            if (hasDirectTranslationChild) {
+                return;
+            }
+
             // Per-selector processed marker: prevent infinite recursion
             if (typeof selectorMarker !== 'undefined' && element.hasAttribute(selectorMarker)) {
                 return;
             }
             if (typeof selectorMarker !== 'undefined') {
                 element.setAttribute(selectorMarker, 'true');
+            }
+
+            // FIRST: Try to match the entire element's innerHTML (for HTML content translations)
+            // This handles cases where the translation key includes HTML markup
+            if (element.children.length > 0) {
+                var elementHTML = element.innerHTML.trim();
+                var currentLang = document.documentElement.getAttribute('data-lang') ||
+                    document.documentElement.getAttribute('lang') ||
+                    document.body.getAttribute('lang') ||
+                    'en';
+                var availableLanguages = sectionTranslations ? Object.keys(sectionTranslations) : [];
+                
+                // Check if this exact HTML exists in translations
+                var htmlTranslations = {};
+                for (var lang of availableLanguages) {
+                    var langTranslations = sectionTranslations[lang] || {};
+                    if (langTranslations[elementHTML]) {
+                        htmlTranslations[lang] = langTranslations[elementHTML];
+                    }
+                }
+                
+                // If we found translations for the HTML content, wrap the entire element
+                if (Object.keys(htmlTranslations).length > 0) {
+                    var defaultLang = window.defaultLanguage || 'en';
+                    var defaultTranslation = htmlTranslations[defaultLang] || elementHTML;
+                    
+                    var allSpans = availableLanguages.map(function(lang) {
+                        var display = !hideFilterEnabled ? (lang === currentLang ? '' : 'none') : '';
+                        var translation = htmlTranslations[lang] || defaultTranslation;
+                        var encoded = encodeForDataAttr(translation);
+                        return hideFilterEnabled
+                            ? '<span class="translate lang-' + lang + '" data-translation="' + encoded + '" data-original-text="' + encodeForDataAttr(elementHTML) + '">' + translation + '</span>'
+                            : '<span class="translate lang-' + lang + '" data-translation="' + encoded + '" data-original-text="' + encodeForDataAttr(elementHTML) + '" style="display: ' + display + ';">' + translation + '</span>';
+                    }).join('');
+                    
+                    // Create wrapper with translation spans
+                    var wrapper = document.createElement('span');
+                    wrapper.className = 'multilang-wrapper';
+                    wrapper.setAttribute('data-original-text', elementHTML);
+                    wrapper.setAttribute('data-default-text', defaultTranslation);
+                    wrapper.innerHTML = allSpans;
+                    
+                    // Replace element's content with wrapped translations
+                    element.innerHTML = '';
+                    element.appendChild(wrapper);
+                    
+                    // Mark as processed and return early - don't process child nodes
+                    return;
+                }
             }
 
             // Convert to array to prevent live NodeList issues
@@ -805,6 +883,9 @@
                         var wrapperOriginalText = firstTranslateSpan ? 
                             firstTranslateSpan.getAttribute('data-original-text') : 
                             originalText;
+                        
+                        // CRITICAL: Strip any HTML tags from wrapperOriginalText to prevent recursive issues
+                        wrapperOriginalText = wrapperOriginalText.replace(/<[^>]+>/g, '').trim();
                         
                         wrapper.setAttribute('data-original-text', wrapperOriginalText);
                         // Always set data-default-text, even if empty
