@@ -683,6 +683,9 @@ function get_available_translation_sections() {
 		if (isset($meta['_disabled'])) {
 			$sections[$category]['structure']['_disabled'] = $meta['_disabled'];
 		}
+		if (isset($meta['_pages'])) {
+			$sections[$category]['structure']['_pages'] = $meta['_pages'];
+		}
 	}
 
 	// Add keys from translations data
@@ -707,6 +710,9 @@ function get_available_translation_sections() {
 		}
 		if (isset($data['_disabled']) && !isset($sections[$category]['structure']['_disabled'])) {
 			$sections[$category]['structure']['_disabled'] = $data['_disabled'];
+		}
+		if (isset($data['_pages']) && !isset($sections[$category]['structure']['_pages'])) {
+			$sections[$category]['structure']['_pages'] = $data['_pages'];
 		}
 		// Extract translation keys (exclude meta keys)
 		$unordered_keys = array();

@@ -135,7 +135,12 @@ function multilang_container_enqueue_scripts() {
 			foreach ($structure_data as $section => $config) {
 				$section_method = isset($config['_method']) ? $config['_method'] : 'server';
 				$is_disabled = isset($config['_disabled']) && $config['_disabled'];
-				if ($section_method === 'javascript' && !$is_disabled && isset($config['_selectors']) && is_array($config['_selectors'])) {
+				$section_pages = isset($config['_pages']) ? $config['_pages'] : '*';
+				
+				// Check if section applies to current page
+				$applies_to_page = function_exists('multilang_should_apply_section') ? multilang_should_apply_section($section_pages) : true;
+				
+				if ($section_method === 'javascript' && !$is_disabled && $applies_to_page && isset($config['_selectors']) && is_array($config['_selectors'])) {
 					$selectors = array_merge($selectors, $config['_selectors']);
 				}
 			}
