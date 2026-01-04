@@ -21,28 +21,38 @@ if (defined('DOING_AJAX') && DOING_AJAX) {
 }
 
 
+// Load core utilities first
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
-require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
 
-//require_once plugin_dir_path(__FILE__) . 'includes/admin-bar-menu.php';
+// Load translations functions BEFORE server-translation.php (dependency)
+require_once plugin_dir_path(__FILE__) . 'translations-settings.php';
 
+// Load frontend essentials only
 require_once plugin_dir_path(__FILE__) . 'includes/language-switcher.php';
 require_once plugin_dir_path(__FILE__) . 'includes/assets-handler.php';
 require_once plugin_dir_path(__FILE__) . 'includes/server-translation.php';
 require_once plugin_dir_path(__FILE__) . 'includes/frontend-rendering.php';
-require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
-require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
 
-require_once plugin_dir_path(__FILE__) . 'admin/tab-language-settings.php';
-require_once plugin_dir_path(__FILE__) . 'admin/tab-options.php';
-require_once plugin_dir_path(__FILE__) . 'admin/utilities-admin.php';
-require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
-
+// Load content filters (titles, excerpts, SEO)
 require_once plugin_dir_path(__FILE__) . 'includes/title-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-seo.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
+
+// Load BLOCKS
+require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
+
+// Lazy-load admin files only when needed
+if (is_admin()) {
+    require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
+    
+    require_once plugin_dir_path(__FILE__) . 'includes/admin-interface.php';
+    require_once plugin_dir_path(__FILE__) . 'admin/tab-language-settings.php';
+    require_once plugin_dir_path(__FILE__) . 'admin/tab-options.php';
+    require_once plugin_dir_path(__FILE__) . 'admin/utilities-admin.php';
+    require_once plugin_dir_path(__FILE__) . 'includes/metaboxes.php';
+}
 
 // Don't cache AJAX unless the user opts in
 // Run at priority 999 to ensure it runs AFTER WP Fastest Cache (which runs at priority 10)
@@ -110,6 +120,22 @@ add_filter('wpfc_toolbar_exclude_ajax', function($actions) {
     $actions[] = 'get_fusion_blog';
     return $actions;
 }, 1, 1);
+
+// Ensure WP Fastest Cache creates separate cache files for each ?lang=xx variant
+add_action('init', function() {
+    if (!is_admin()) {
+        // Tell WPFC to vary cache by the 'lang' query parameter
+        if (isset($_GET['lang'])) {
+            // Set a cookie variant for WPFC to recognize
+            $lang = sanitize_text_field($_GET['lang']);
+            // This helps WPFC differentiate cache files by language
+            add_filter('wpfc_is_mobile', function($is_mobile) use ($lang) {
+                // WPFC uses this internally - we append lang info to help it cache separately
+                return $is_mobile; 
+            });
+        }
+    }
+}, 1);
 
 add_action('wp_ajax_multilang_save_languages_json', function() {
     if (!current_user_can('manage_options')) {

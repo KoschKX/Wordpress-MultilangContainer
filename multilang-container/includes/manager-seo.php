@@ -6,6 +6,11 @@ if (!defined('ABSPATH')) {
 
 // Get a clean excerpt for SEO/meta tags, using only the current language
 function multilang_get_clean_seo_excerpt($post_id = null) {
+    // Skip on backend operations
+    if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
+        return '';
+    }
+    
     if (!$post_id) {
         $post_id = get_the_ID();
     }

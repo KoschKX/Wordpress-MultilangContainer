@@ -105,9 +105,18 @@ function save_translations_json() {
 			}
 			// Always set defaults if missing
 			if (!isset($meta['_selectors'])) $meta['_selectors'] = array('body');
+			if (!isset($meta['_pages'])) $meta['_pages'] = '*';
 			if (!isset($meta['_collapsed'])) $meta['_collapsed'] = false;
 			if (!isset($meta['_method'])) $meta['_method'] = 'server';
 			$new_structure[$section] = $meta;
+		}
+		
+		// Save pages setting
+		if (isset($_POST['pages'][$section])) {
+			$new_structure[$section]['_pages'] = sanitize_text_field($_POST['pages'][$section]);
+		}
+		if (!isset($new_structure[$section]['_pages'])) {
+			$new_structure[$section]['_pages'] = '*';
 		}
 		
 		// CRITICAL FIX: Convert _selectors to array if it's a string
@@ -282,13 +291,22 @@ function multilang_translations_tab_content() {
 							<!-- Language Selector and Current Info -->
 							<div class="selector-section">
 								<div>
-									<h4>CSS Selectors (Comma-separated)</h4>
-									<input class="selectors" type="text" 
-										   name="selectors[<?php echo esc_attr($category); ?>]"
-										   value="<?php echo esc_attr($selector); ?>"
-										   placeholder="CSS selector for this section (e.g., .buttons, #nav-menu)" />
-									
-									<!-- Translation Method for this Section -->
+								<h4>CSS Selectors (Comma-separated)</h4>
+								<input class="selectors" type="text" 
+									   name="selectors[<?php echo esc_attr($category); ?>]"
+									   value="<?php echo esc_attr($selector); ?>"
+									   placeholder="CSS selector for this section (e.g., .buttons, #nav-menu)" />
+								
+								<h4 style="margin-top: 15px;">Pages to Apply (Use * for all pages)</h4>
+								<?php
+								$pages = isset($structure_data['_pages']) ? $structure_data['_pages'] : '*';
+								?>
+								<input class="pages" type="text" 
+									   name="pages[<?php echo esc_attr($category); ?>]"
+									   value="<?php echo esc_attr($pages); ?>"
+									   placeholder="* for all pages, or comma-separated slugs (e.g., home, about, contact)" />
+								
+								<!-- Translation Method for this Section -->
 									<?php
 									$current_section_method = isset($structure_data['_method']) ? $structure_data['_method'] : 'server';
 									?>
@@ -428,7 +446,8 @@ function multilang_translations_tab_content() {
 /**
  * Load all translations (backward compatibility)
  */
-function load_translations() {
+if (!function_exists('load_translations')) {
+    function load_translations() {
 	$languages = get_multilang_available_languages();
 	$translations = array();
 	
@@ -474,12 +493,13 @@ function load_translations() {
 	
 	// Return sections in natural order
 	return $translations;
+    }
 }
 
 /**
- * Save translations in new format
+ * Save translations in new format (split into structure and language files)
  */
-function save_translations($translations) {
+function save_translations_split_format($translations) {
 	$data_dir = get_translations_data_dir();
 	
 	// Ensure data directory exists
@@ -493,7 +513,7 @@ function save_translations($translations) {
 	
     foreach ($translations as $category => $keys) {
         // Check for meta keys
-        $meta_keys = ['_selectors', '_collapsed', '_method', '_key_order'];
+        $meta_keys = ['_selectors', '_collapsed', '_method', '_key_order', '_pages'];
         $has_meta = false;
         $structure[$category] = array();
         foreach ($meta_keys as $meta_key) {
@@ -731,7 +751,7 @@ function set_translation($category, $key, $lang, $translation) {
 	
 	$translations[$category][$key][$lang] = $translation;
 	
-	return save_translations($translations);
+	return save_translations_split_format($translations);
 }
 
 /**

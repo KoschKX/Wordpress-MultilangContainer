@@ -14,8 +14,13 @@ if (!defined('ABSPATH')) {
 
 // CSS solution: hide all languages by default, show only the one matching the body class. Now with caching!
 function multilang_inject_immediate_css() {
-	// Skip loading if we're in the backend
-    if ( multilang_is_backend_operation() ) {
+	// Skip loading on backend - check early
+	if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
+		return;
+	}
+	
+	// Double-check with backend operation helper
+    if (multilang_is_backend_operation()) {
         return;
     }
 	// Only run if cache-handler functions are available
@@ -73,8 +78,13 @@ add_action('enqueue_block_editor_assets', 'multilang_container_enqueue_styles', 
 
 // Load multilang-container.js on the frontend
 function multilang_container_enqueue_scripts() {
-    // Don't load during backend operations
-    if ( multilang_is_backend_operation() ) {
+    // Don't load during backend operations - check this first
+    if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
+        return;
+    }
+    
+    // Double-check with the backend operation helper
+    if (multilang_is_backend_operation()) {
         return;
     }
     

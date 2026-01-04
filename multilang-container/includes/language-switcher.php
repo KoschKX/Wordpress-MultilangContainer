@@ -3,6 +3,12 @@
  * Multilang Container - Language Switcher
  * 
  * Manages language detection, body classes, and switching between languages
+ * 
+ * PERFORMANCE OPTIMIZATION:
+ * Link processing (appending ?lang=xx to internal links) is handled entirely
+ * client-side via JavaScript. This eliminates expensive server-side regex operations,
+ * removes output buffering overhead, and allows full page caching by WP Fastest Cache.
+ * The result is significantly faster page loads, especially with ?lang=xx query strings.
  */
 
 // Don't allow direct access to this file
@@ -24,13 +30,24 @@ if (!function_exists('multilang_get_options_file_path')) {
 
 if (!function_exists('multilang_get_options')) {
     function multilang_get_options() {
+        static $cached_options = null;
+        
+        // Return cached version if available
+        if ($cached_options !== null) {
+            return $cached_options;
+        }
+        
         $file_path = multilang_get_options_file_path();
         if (!file_exists($file_path)) {
-            return array();
+            $cached_options = array();
+            return $cached_options;
         }
+        
         $json_content = file_get_contents($file_path);
         $options = json_decode($json_content, true);
-        return is_array($options) ? $options : array();
+        $cached_options = is_array($options) ? $options : array();
+        
+        return $cached_options;
     }
 }
 
@@ -79,6 +96,16 @@ add_filter( 'body_class', 'multilang_body_class_lang' );
  * Generate language bar HTML
  */
 function multilang_generate_langbar() {
+	// Skip on backend operations
+	if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
+		return '';
+	}
+	
+	static $cached_langbar = null;
+	if ($cached_langbar !== null) {
+		return $cached_langbar;
+	}
+	
 	$json_path = plugin_dir_path(dirname(__FILE__)) . '/data/languages-flags.json';
 	$lang_flags = array();
 	if (file_exists($json_path)) {
@@ -118,6 +145,8 @@ function multilang_generate_langbar() {
     }
 	$langbar .= '</ul>';
 	
+	// Cache the result
+	$cached_langbar = $langbar;
 	return $langbar;
 }
 
@@ -152,62 +181,8 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
 
 /* QUERY STRING */
 
-    // Unified function to append ?lang=xx to all internal links
-    function multilang_append_lang_to_links($html) {
-        $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
-        $use_query_string = isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'];
-        $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : 'en';
-        // Always use cookie if set, fallback to $_GET, then default
-        $lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : (isset($_GET['lang']) ? sanitize_text_field($_GET['lang']) : $default_lang);
-        if ($use_query_string && $query_string_enabled && $lang) {
-            $site_url = preg_replace('#^https?://#', '', rtrim(home_url(), '/'));
-            // Always add data-multilang-link to internal links for JS targeting
-            $html = preg_replace_callback('/<a([^>]+)href=["\']((?:\/|\.|\?)[^"\'>]*|https?:\/\/(?:' . preg_quote($site_url, '/') . ')[^"\'>]*)["\']/', function($matches) use ($lang, $site_url, $default_lang) {
-                $url = $matches[2];
-                $tag = $matches[0];
-                // Only update if relative or absolute for current site
-                if (
-                    preg_match('/^(https?:)?\/\//', $url) && strpos($url, $site_url) === false
-                ) return $tag;
-                // Remove lang=xx for default language
-                if ($lang === $default_lang) {
-                    $new_url = preg_replace('/([&?])lang=[^&#]*(&)?/', '$1', $url);
-                    $new_url = rtrim($new_url, '?&');
-                } else {
-                    // Only update if not already has ?lang=xx
-                    if (strpos($url, 'lang=') !== false) $new_url = $url;
-                    else {
-                        $sep = strpos($url, '?') === false ? '?' : '&';
-                        $new_url = $url . $sep . 'lang=' . $lang;
-                    }
-                }
-                // Add data-multilang-link attribute if not present
-                if (strpos($tag, 'data-multilang-link') === false) {
-                    $tag = preg_replace('/<a/', '<a data-multilang-link="true"', $tag, 1);
-                }
-                return str_replace($url, $new_url, $tag);
-            }, $html);
-        }
-        return $html;
-    }
-
-    // Ensure all post/page/custom post type permalinks include ?lang=xx
-    function multilang_add_lang_to_permalink($url) {
-        $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
-        $use_query_string = isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'];
-        $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : 'en';
-        $lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : (isset($_GET['lang']) ? sanitize_text_field($_GET['lang']) : $default_lang);
-        if ($use_query_string && $query_string_enabled && $lang) {
-            // Don't add if already has ?lang=xx or if it's the default language
-            if (strpos($url, 'lang=') === false && $lang !== $default_lang) {
-                $sep = strpos($url, '?') === false ? '?' : '&';
-                $url .= $sep . 'lang=' . $lang;
-            }
-        }
-        return $url;
-    }
+    // Note: All link processing is now handled client-side via JavaScript for better performance
+    // The expensive server-side regex operations have been removed
 
     // Detect ?lang=xx in query string and set cookie (server-side) ONLY if enabled in options
     add_action('init', function() {
@@ -220,6 +195,13 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
                 // Set cookie for 1 year
                 setcookie('lang', $lang, time() + 365*24*60*60, '/');
                 $_COOKIE['lang'] = $lang; // For immediate use in this request
+                
+                // Add Vary header to help caching systems differentiate by query string
+                if (!is_admin()) {
+                    add_action('send_headers', function() {
+                        header('Vary: Cookie', false);
+                    }, 1);
+                }
             }
         }
     });
@@ -260,52 +242,5 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
     });
 
 
-    add_filter('post_link', 'multilang_add_lang_to_permalink', 10, 1);
-    add_filter('page_link', 'multilang_add_lang_to_permalink', 10, 1);
-    add_filter('post_type_link', 'multilang_add_lang_to_permalink', 10, 1);
-    add_filter('widget_text', function($html) {
-        $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
-        $use_query_string = isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'];
-        $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : 'en';
-    $lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : (isset($_GET['lang']) ? sanitize_text_field($_GET['lang']) : $default_lang);
-        if ($use_query_string && $query_string_enabled && $lang !== $default_lang) {
-            return multilang_append_lang_to_links($html);
-        } else {
-            // Remove any ?lang=xx from widget links for default language
-            return preg_replace('/([&?])lang=[^&#]*(&)?/', '$1', $html);
-        }
-    }, 99);
-    add_filter('widget_content', function($html) {
-        $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
-        $use_query_string = isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'];
-        $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : 'en';
-    $lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : (isset($_GET['lang']) ? sanitize_text_field($_GET['lang']) : $default_lang);
-        if ($use_query_string && $query_string_enabled && $lang !== $default_lang) {
-            return multilang_append_lang_to_links($html);
-        } else {
-            return preg_replace('/([&?])lang=[^&#]*(&)?/', '$1', $html);
-        }
-    }, 99);
-    add_filter('get_calendar', function($html) {
-        $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
-        $use_query_string = isset($options['language_switcher_query_string']) && $options['language_switcher_query_string'];
-        $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
-        $default_lang = function_exists('get_multilang_default_language') ? get_multilang_default_language() : 'en';
-    $lang = isset($_COOKIE['lang']) ? sanitize_text_field($_COOKIE['lang']) : (isset($_GET['lang']) ? sanitize_text_field($_GET['lang']) : $default_lang);
-        if ($use_query_string && $query_string_enabled && $lang !== $default_lang) {
-            return multilang_append_lang_to_links($html);
-        } else {
-            return preg_replace('/([&?])lang=[^&#]*(&)?/', '$1', $html);
-        }
-    }, 99);
-
-    // Append ?lang=xx to all internal links in post/page content using the_content filter
-    add_filter('the_content', 'multilang_append_lang_to_links');
-    // Use shutdown to process final HTML output and append ?lang=xx to all internal links
-    add_action('init', function() {
-        if (!is_admin() && !headers_sent()) {
-            ob_start('multilang_append_lang_to_links');
-        }
-    });
+    // Links are now processed client-side via JavaScript - no server-side filters needed
+    // This improves caching and performance significantly

@@ -5,6 +5,11 @@ if (!defined('ABSPATH')) {
 }
 
 function multilang_get_formatted_excerpt($post_id = null) {
+    // Skip on backend operations
+    if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
+        return '';
+    }
+    
     if (!$post_id) {
         $post_id = get_the_ID();
     }

@@ -6,6 +6,13 @@ if (!defined('ABSPATH')) {
 
 // Load language data from file if cache-handler is not available
 function load_language_data($lang) {
+    // Static cache to avoid repeated file I/O
+    static $language_data_cache = array();
+    
+    if (isset($language_data_cache[$lang])) {
+        return $language_data_cache[$lang];
+    }
+    
     $base_dir = dirname(__FILE__) . '/../languages/';
     $file = $base_dir . $lang . '.json';
     if (!file_exists($file)) {
@@ -20,10 +27,111 @@ function load_language_data($lang) {
         $json = file_get_contents($file);
         $data = json_decode($json, true);
         if (is_array($data)) {
+            $language_data_cache[$lang] = $data;
             return $data;
         }
     }
+    
+    $language_data_cache[$lang] = array();
     return array();
+}
+
+/**
+ * Get current page path and slug for page-specific translation filtering
+ */
+function multilang_get_current_page_info() {
+    static $page_info = null;
+    
+    if ($page_info !== null) {
+        return $page_info;
+    }
+    
+    global $post;
+    
+    // Get URL path
+    $url_path = trim(parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH), '/');
+    
+    // Check if we're on the home page
+    if (is_front_page() || is_home() || empty($url_path)) {
+        $page_info = array(
+            'path' => '/',
+            'slug' => 'home'
+        );
+        return $page_info;
+    }
+    
+    // Get page/post slug
+    $slug = '';
+    if (isset($post->post_name)) {
+        $slug = $post->post_name;
+    } else {
+        $parts = explode('/', $url_path);
+        $slug = end($parts);
+    }
+    
+    $page_info = array(
+        'path' => '/' . $url_path,
+        'slug' => $slug
+    );
+    
+    return $page_info;
+}
+
+/**
+ * Check if a section should be applied to the current page
+ */
+function multilang_should_apply_section($section_pages) {
+    // If no pages setting or *, apply to all pages
+    if (empty($section_pages) || $section_pages === '*') {
+        return true;
+    }
+    
+    static $page_info = null;
+    if ($page_info === null) {
+        $page_info = multilang_get_current_page_info();
+    }
+    
+    $current_path = $page_info['path'];
+    $current_slug = $page_info['slug'];
+    
+    // Cache processed pages per section_pages string
+    static $processed_cache = array();
+    $cache_key = $section_pages;
+    
+    if (!isset($processed_cache[$cache_key])) {
+        // Split pages by comma and trim
+        $allowed_pages = array_map('trim', explode(',', $section_pages));
+        
+        // Clean up each allowed page entry (strip domains, normalize paths)
+        $cleaned_pages = array();
+        foreach ($allowed_pages as $page) {
+            // Strip http://, https://, and domain if present
+            if (strpos($page, 'http') === 0) {
+                $page = preg_replace('#^https?://[^/]+#i', '', $page);
+            }
+            $page = trim($page);
+            
+            // Ensure it starts with / if not empty
+            if (!empty($page) && $page[0] !== '/') {
+                $page = '/' . $page;
+            }
+            
+            $cleaned_pages[] = array(
+                'path' => $page,
+                'slug' => trim($page, '/')
+            );
+        }
+        $processed_cache[$cache_key] = $cleaned_pages;
+    }
+    
+    // Check against cached cleaned pages
+    foreach ($processed_cache[$cache_key] as $page_data) {
+        if ($page_data['path'] === $current_path || $page_data['slug'] === $current_slug) {
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 function multilang_server_side_translate( $content, $force_lang = null ) {
@@ -38,7 +146,8 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
         return $content;
     }
 
-    if (empty($content)) {
+    // Early return for empty or very short content (performance optimization)
+    if (empty($content) || strlen($content) < 10) {
         return $content;
     }
     
@@ -61,6 +170,11 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
     // Use force_lang if set, otherwise use current language
     $current_lang = $force_lang ?: $current_lang_cache;
     
+    // Note: We no longer skip translation for default language because we need to wrap
+    // content with <span class="translate lang-xx"> elements so JavaScript can show/hide
+    // them when users switch languages. Without this wrapping, the default language
+    // content is invisible to the translation system.
+    
     if ($translations === null) {
         $translations = load_translations();
         if ( empty($translations) ) {
@@ -82,7 +196,14 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
     $filtered_translations = $translations;
     if ($structure_data && is_array($structure_data)) {
         foreach ($filtered_translations as $section => $keys) {
+            // Skip disabled sections
             if (isset($structure_data[$section]['_disabled']) && $structure_data[$section]['_disabled']) {
+                unset($filtered_translations[$section]);
+                continue;
+            }
+            // Skip sections that don't apply to current page
+            $section_pages = isset($structure_data[$section]['_pages']) ? $structure_data[$section]['_pages'] : '*';
+            if (!multilang_should_apply_section($section_pages)) {
                 unset($filtered_translations[$section]);
             }
         }
@@ -92,7 +213,7 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
 }
 
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
-    // Set up structure data if not already done
+    // Set up structure data if not already done (single cached instance)
     static $structure_data = null;
     if ($structure_data === null) {
         if (function_exists('multilang_get_cached_structure_data')) {
@@ -106,21 +227,18 @@ function multilang_process_text_for_translations($html, $translations, $current_
     if (empty($translations) || strlen($html) < 100) {
         return $html; // Early return if translations are empty or HTML is too short
     }
-    // Remove translation keys from disabled sections
-    static $structure_data_patch = null;
-    if ($structure_data_patch === null) {
-        if (function_exists('multilang_get_cached_structure_data')) {
-            $structure_data_patch = multilang_get_cached_structure_data();
-        } else if (function_exists('load_structure_data')) {
-            $structure_data_patch = load_structure_data();
-        } else {
-            $structure_data_patch = false;
-        }
-    }
+    
+    // Use the same structure_data instance for filtering
     $filtered_translations = array();
-    if ($structure_data_patch && is_array($structure_data_patch)) {
+    if ($structure_data && is_array($structure_data)) {
         foreach ($translations as $section => $keys) {
-            if (isset($structure_data_patch[$section]['_disabled']) && $structure_data_patch[$section]['_disabled']) {
+            // Skip disabled sections
+            if (isset($structure_data[$section]['_disabled']) && $structure_data[$section]['_disabled']) {
+                continue;
+            }
+            // Skip sections that don't apply to current page
+            $section_pages = isset($structure_data[$section]['_pages']) ? $structure_data[$section]['_pages'] : '*';
+            if (!multilang_should_apply_section($section_pages)) {
                 continue;
             }
             $filtered_translations[$section] = $keys;
@@ -224,10 +342,14 @@ function multilang_process_text_for_translations($html, $translations, $current_
                     $data_default_text = $lang_val;
                 }
                 $data_translation[$lang] = $lang_val;
-                $translations[] = '<span class=\'translate lang-' . $lang_class . '\' data-default-text=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\' data-translation=\'' . htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</span>';
+                
+                // CRITICAL: Always encode data-translation attribute, even if it contains the same text
+                // This ensures JavaScript can properly decode and display it when switching languages
+                $encoded_translation = htmlspecialchars($lang_val, ENT_QUOTES, 'UTF-8');
+                $translations[] = '<span class=\'translate lang-' . $lang_class . '\' data-default-text=\'' . $encoded_translation . '\' data-translation=\'' . $encoded_translation . '\' data-original-text=\'' . htmlspecialchars($direct_translation_key, ENT_QUOTES, 'UTF-8') . '\'>' . $lang_val . '</span>';
             }
             $data_translation_json = htmlspecialchars(json_encode($data_translation), ENT_QUOTES, 'UTF-8');
-            $wrapped = '<span class="multilang-wrapper" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text) . '">' . implode('', $translations) . '</span>';
+            $wrapped = '<span class="multilang-wrapper" data-original-text="' . htmlspecialchars($direct_translation_key, ENT_QUOTES, 'UTF-8') . '" data-multilang="1" data-translation="' . $data_translation_json . '" data-default-text="' . htmlspecialchars($data_default_text, ENT_QUOTES, 'UTF-8') . '">' . implode('', $translations) . '</span>';
             return $wrapped;
         }
     }

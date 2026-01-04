@@ -93,21 +93,39 @@ if (!defined('ABSPATH')) {
 
 
 	function get_multilang_available_languages() {
+		static $cached_languages = null;
+		
+		if ($cached_languages !== null) {
+			return $cached_languages;
+		}
+		
 		if (function_exists('multilang_get_options')) {
 			$options = multilang_get_options();
-			return isset($options['languages']) && is_array($options['languages']) ? $options['languages'] : array('en');
+			$cached_languages = isset($options['languages']) && is_array($options['languages']) ? $options['languages'] : array('en');
+		} else {
+			$cached_languages = array('en');
 		}
-		return array('en');
+		
+		return $cached_languages;
 	}
 
 	function get_multilang_default_language() {
+		static $cached_default = null;
+		
+		if ($cached_default !== null) {
+			return $cached_default;
+		}
+		
 		if (function_exists('multilang_get_options')) {
 			$options = multilang_get_options();
 			$default = isset($options['default_language']) ? $options['default_language'] : 'en';
 			$available = get_multilang_available_languages();
-			return in_array($default, $available) ? $default : (isset($available[0]) ? $available[0] : 'en');
+			$cached_default = in_array($default, $available) ? $default : (isset($available[0]) ? $available[0] : 'en');
+		} else {
+			$cached_default = 'en';
 		}
-		return 'en';
+		
+		return $cached_default;
 	}
 
 	function multilang_get_current_language() {

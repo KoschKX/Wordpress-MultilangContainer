@@ -59,18 +59,18 @@ add_shortcode('multilang_title', 'multilang_title_shortcode');
 
 // Filter to wrap title with translation spans
 function multilang_filter_the_title($title, $post_id = null) {
-	// Only filter on frontend, not in admin
-	if (is_admin()) {
-		return $title;
-	}
-	
-	// Skip if no post ID or if it's not a valid post
-	if (!$post_id || !is_numeric($post_id)) {
+	// Skip for backend operations (admin, AJAX, REST API, cron)
+	if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
 		return $title;
 	}
 	
 	// Skip for REST API requests to avoid JSON issues
 	if (defined('REST_REQUEST') && REST_REQUEST) {
+		return $title;
+	}
+	
+	// Skip if no post ID or if it's not a valid post
+	if (!$post_id || !is_numeric($post_id)) {
 		return $title;
 	}
 	

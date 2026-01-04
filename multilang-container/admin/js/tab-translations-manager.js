@@ -73,12 +73,12 @@ document.addEventListener('DOMContentLoaded', function() {
             jsonData.nonce = multilangVars.nonce;
             var xhr = new XMLHttpRequest();
             var url = multilangVars.ajaxUrl + '?action=save_translations_json';
-            console.log('Saving translations to:', url);
+            // console.log('Saving translations to:', url);
             xhr.open('POST', url, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
-                    console.log('AJAX response:', xhr.status, xhr.responseText);
+                    // console.log('AJAX response:', xhr.status, xhr.responseText);
                     if (xhr.status === 200) {
                         try {
                             var resp = JSON.parse(xhr.responseText);
@@ -93,13 +93,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                 // Refresh File Information box
                                 refreshFileInfoBox();
                             } else {
-                                console.log('Error: ' + (resp.data && resp.data.message ? resp.data.message : 'Unknown error'));
+                                // console.log('Error: ' + (resp.data && resp.data.message ? resp.data.message : 'Unknown error'));
                             }
                         } catch (e) {
-                            console.log('Error saving translations.');
+                            // console.log('Error saving translations.');
                         }
                     } else {
-                        console.log('Error saving translations.');
+                        // console.log('Error saving translations.');
                     }
                 }
             };
@@ -122,10 +122,12 @@ function buildTranslationsJSON() {
         result[category] = {};
         // Add meta fields for each section
         var selectorInput = sectionBox.querySelector('input[name^="selectors["]');
+        var pagesInput = sectionBox.querySelector('input[name^="pages["]');
         var methodInput = sectionBox.querySelector('input[name^="section_methods["]:checked');
         var collapsed = collapsible.style.display === 'none';
         var disabled = sectionBox.classList.contains('section-disabled');
         result[category]['_selectors'] = selectorInput ? selectorInput.value : 'body';
+        result[category]['_pages'] = pagesInput ? pagesInput.value : '*';
         result[category]['_collapsed'] = collapsed;
         result[category]['_method'] = methodInput ? methodInput.value : 'server';
         result[category]['_disabled'] = disabled;
@@ -147,6 +149,7 @@ function buildTranslationsJSON() {
         // Always include meta fields even if no keys
         if (!hasKeys) {
             result[category]['_selectors'] = selectorInput ? selectorInput.value : 'body';
+            result[category]['_pages'] = pagesInput ? pagesInput.value : '*';
             result[category]['_collapsed'] = collapsed;
         }
         // Always set _method for every section
@@ -624,6 +627,8 @@ function createNewSectionHtml(sanitizedName, displayName) {
     html += '<div>';
     html += '<h4>CSS Selectors (Comma-separated)</h4>';
     html += '<input class="selectors" type="text" name="selectors[' + sanitizedName + ']" value="body" placeholder="CSS selector for this section (e.g., .buttons, #nav-menu)" />';
+    html += '<h4 style="margin-top: 15px;">Pages to Apply (Use * for all pages)</h4>';
+    html += '<input class="pages" type="text" name="pages[' + sanitizedName + ']" value="*" placeholder="* for all pages, or comma-separated slugs (e.g., home, about, contact)" />';
     html += '<div class="section_option" style="margin-top: 15px;">';
     html += '<h4>Translation Method</h4>';
     html += '<div>';
@@ -985,17 +990,17 @@ document.addEventListener('DOMContentLoaded', function() {
             jsonData.nonce = multilangVars.nonce;
             var xhr = new XMLHttpRequest();
             var url = multilangVars.ajaxUrl + '?action=save_translations_json';
-            console.log('Saving translations to:', url);
+            // console.log('Saving translations to:', url);
             xhr.open('POST', url, true);
             xhr.setRequestHeader('Content-Type', 'application/json');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState === 4) {
-                    console.log('AJAX response:', xhr.status, xhr.responseText);
+                    // console.log('AJAX response:', xhr.status, xhr.responseText);
                     if (xhr.status === 200) {
                         try {
                             var resp = JSON.parse(xhr.responseText);
                             if (resp.success) {
-                                console.log('Translations saved successfully!');
+                                // console.log('Translations saved successfully!');
                                 document.querySelectorAll('.postbox[data-deleted]').forEach(function(section) {
                                     section.parentNode.removeChild(section);
                                 });
@@ -1005,13 +1010,13 @@ document.addEventListener('DOMContentLoaded', function() {
                                 // Refresh File Information box
                                 refreshFileInfoBox();
                             } else {
-                                console.log('Error: ' + (resp.data && resp.data.message ? resp.data.message : 'Unknown error'));
+                               // console.log('Error: ' + (resp.data && resp.data.message ? resp.data.message : 'Unknown error'));
                             }
                         } catch (e) {
-                            console.log('Error saving translations.');
+                            // console.log('Error saving translations.');
                         }
                     } else {
-                        console.log('Error saving translations.');
+                        // console.log('Error saving translations.');
                     }
                 }
             };
@@ -1077,7 +1082,7 @@ function refreshFileInfoBox() {
                 fileInfoBox.innerHTML = infoHtml;
             })
             .catch(function(err) {
-                console.log('Error refreshing file info:', err);
+                // console.log('Error refreshing file info:', err);
             });
     }
 }

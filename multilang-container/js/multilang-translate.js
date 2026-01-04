@@ -268,16 +268,94 @@
     }
 
     function switchToLanguage(lang) {
-        document.documentElement.setAttribute("data-lang", lang);
-        document.documentElement.setAttribute("lang", lang);
-        document.body.setAttribute("lang", lang);
+        // Use requestAnimationFrame to batch all DOM changes in a single frame
+        requestAnimationFrame(function() {
+            // Update display FIRST, then attributes
+            updateLanguageDisplay(lang);
+            
+            document.documentElement.setAttribute("data-lang", lang);
+            document.documentElement.setAttribute("lang", lang);
+            document.body.setAttribute("lang", lang);
 
-        if (window.setLangCookie) {
-            window.setLangCookie(lang);
+            if (window.setLangCookie) {
+                window.setLangCookie(lang);
+            }
+        });
+    }
+
+    /**
+     * Get current page path and slug for page-specific translation filtering
+     */
+    function getCurrentPageInfo() {
+        var path = window.location.pathname;
+        // Remove trailing slash but keep leading slash
+        path = path.replace(/\/+$/g, '') || '/';
+        
+        // If just /, it's the home page
+        if (path === '/') {
+            return {
+                path: '/',
+                slug: 'home'
+            };
         }
+        
+        // Get the last segment of the path for slug
+        var segments = path.split('/').filter(function(s) { return s; });
+        var slug = segments[segments.length - 1] || 'home';
+        
+        // Remove .html or .php extensions if present
+        slug = slug.replace(/\.(html|php)$/i, '');
+        
+        return {
+            path: path,
+            slug: slug
+        };
+    }
 
-        updateLanguageDisplay(lang);
-        runTranslations();
+    /**
+     * Check if a section should be applied to the current page
+     */
+    function shouldApplySection(sectionPages) {
+        // If no pages setting or *, apply to all pages
+        if (!sectionPages || sectionPages === '*') {
+            return true;
+        }
+        
+        var pageInfo = getCurrentPageInfo();
+        var currentPath = pageInfo.path;
+        var currentSlug = pageInfo.slug;
+        
+        // Split pages by comma and trim
+        var allowedPages = sectionPages.split(',').map(function(p) {
+            return p.trim();
+        });
+        
+        // Check each allowed page
+        for (var i = 0; i < allowedPages.length; i++) {
+            var page = allowedPages[i];
+            
+            // Strip http://, https://, and domain if present
+            page = page.replace(/^https?:\/\/[^\/]+/i, '');
+            page = page.trim();
+            
+            // Ensure it starts with / if not empty
+            if (page && page[0] !== '/') {
+                page = '/' + page;
+            }
+            
+            // Match full path first (e.g., /about/team)
+            if (page === currentPath) {
+                return true;
+            }
+            
+            // Match slug (e.g., team)
+            var pageSlug = page.replace(/^\/+|\/+$/g, '');
+            if (pageSlug === currentSlug) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     function runTranslations() {
@@ -296,6 +374,10 @@
             var sectionConfig = structureData[sectionName];
             // Skip disabled sections
             if (sectionConfig && sectionConfig._disabled) return;
+            // Skip sections that don't apply to current page
+            var sectionPages = sectionConfig && sectionConfig._pages ? sectionConfig._pages : '*';
+            if (!shouldApplySection(sectionPages)) return;
+            
             if (sectionConfig && typeof sectionConfig === 'object' && sectionConfig['_selectors']) {
                 var sectionMethod = sectionConfig['_method'] || 'server';
                 if (sectionMethod === 'javascript') {
@@ -335,6 +417,10 @@
                 sections.forEach(function(sectionName) {
                     var sectionConfig = structureData[sectionName];
                     if (sectionConfig && sectionConfig._disabled) return; // skip disabled
+                    // Skip sections that don't apply to current page
+                    var sectionPages = sectionConfig && sectionConfig._pages ? sectionConfig._pages : '*';
+                    if (!shouldApplySection(sectionPages)) return;
+                    
                     if (langData[sectionName] && typeof langData[sectionName] === 'object') {
                         var sectionData = langData[sectionName];
                         Object.keys(sectionData).forEach(function(key) {
@@ -432,36 +518,32 @@
         }
     }
 
-    // Function to update language display when switching languages (ultra-optimized v3 - no RAF)
+    // Function to update language display when switching languages (ultra-optimized v5 - instant switch)
     function updateLanguageDisplay(newLang) {
-        // Updated selector to handle multiple patterns:
-        // 1. .translate elements with lang- classes
-        // 2. Any elements with lang- classes (server-side generated)
-        // 3. Elements with lang- classes nested inside .translate elements
+        // Process everything in one synchronous pass for instant switching
         const allElements = document.querySelectorAll('.translate[class*="lang-"], [class*="lang-"], .translate [class*="lang-"]');
-
+        const fragment = document.createDocumentFragment();
+        
+        // First pass: show/hide and prepare content updates
         for (let i = 0; i < allElements.length; i++) {
             const element = allElements[i];
-            // Get language from class
             const match = element.className.match(/lang-([a-z]{2})/);
             if (!match) continue;
             const elementLang = match[1];
 
-            // Ensure data-default-text is set/updated on every span
+            // Handle wrapper default text
             const wrapper = element.closest('.multilang-wrapper');
-            let defaultText = '';
-            if (wrapper) {
-                // Try to get from wrapper attribute first
-                defaultText = wrapper.getAttribute('data-default-text') || '';
+            if (wrapper && !element.hasAttribute('data-default-text')) {
+                let defaultText = wrapper.getAttribute('data-default-text') || '';
                 if (!defaultText) {
-                    var originalText = wrapper.getAttribute('data-original-text');
-                    var defaultLang = window.defaultLanguage || 'en';
+                    const originalText = wrapper.getAttribute('data-original-text');
+                    const defaultLang = window.defaultLanguage || 'en';
                     if (window.multilangLangBar && window.multilangLangBar.languageFiles && window.multilangLangBar.languageFiles[defaultLang]) {
-                        var langData = window.multilangLangBar.languageFiles[defaultLang];
+                        const langData = window.multilangLangBar.languageFiles[defaultLang];
                         if (langData[originalText]) {
                             defaultText = langData[originalText];
                         } else {
-                            for (var cat in langData) {
+                            for (const cat in langData) {
                                 if (langData.hasOwnProperty(cat) && typeof langData[cat] === 'object') {
                                     if (langData[cat][originalText]) {
                                         defaultText = langData[cat][originalText];
@@ -472,36 +554,51 @@
                         }
                     }
                 }
+                if (defaultText) {
+                    element.setAttribute('data-default-text', defaultText);
+                }
             }
-            element.setAttribute('data-default-text', defaultText);
 
+            // Decode translation data if needed BEFORE showing/hiding
             const dataTranslation = element.getAttribute('data-translation');
-            if (dataTranslation && !element.hasAttribute('data-decoded')) {
+            let contentRestored = false;
+            
+            if (dataTranslation && elementLang === newLang) {
+                let decodedContent = null;
+                
                 if (hideFilterEnabled) {
-                    if (elementLang === newLang) {
-                        let decodedContent = decodeDataAttr(dataTranslation);
-                        if (!decodedContent || decodedContent === dataTranslation) {
-                            decodedContent = dataTranslation.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
-                                return String.fromCharCode(parseInt(hex, 16));
-                            });
-                        }
-                        element.innerHTML = decodedContent;
-                        element.setAttribute('data-decoded', 'true');
-                    }
-                } else {
-                    let decodedContent = decodeDataAttr(dataTranslation);
+                    decodedContent = decodeDataAttr(dataTranslation);
                     if (!decodedContent || decodedContent === dataTranslation) {
                         decodedContent = dataTranslation.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
                             return String.fromCharCode(parseInt(hex, 16));
                         });
                     }
+                } else {
+                    decodedContent = decodeDataAttr(dataTranslation);
+                    if (!decodedContent || decodedContent === dataTranslation) {
+                        decodedContent = dataTranslation.replace(/\\u([0-9a-fA-F]{4})/g, function(match, hex) {
+                            return String.fromCharCode(parseInt(hex, 16));
+                        });
+                    }
+                }
+                
+                if (decodedContent) {
                     element.innerHTML = decodedContent;
                     element.setAttribute('data-decoded', 'true');
+                    contentRestored = true;
                 }
             }
 
+            // Show/hide based on language
             if (element.classList.contains('translate') || element.closest('.translate')) {
                 if (elementLang === newLang) {
+                    // Restore content if empty and not already restored
+                    if (!contentRestored && !element.innerHTML.trim()) {
+                        const defaultText = element.getAttribute('data-default-text');
+                        if (defaultText) {
+                            element.innerHTML = defaultText;
+                        }
+                    }
                     element.style.display = '';
                 } else {
                     element.style.display = 'none';
@@ -509,25 +606,29 @@
             }
         }
 
+        // Update buttons
         document.querySelectorAll('[data-multilang-button-wrapped]').forEach(function(button) {
-            var translationKey = 'data-text-' + newLang;
+            const translationKey = 'data-text-' + newLang;
             if (button.hasAttribute(translationKey)) {
-                button.textContent = button.getAttribute(translationKey);
+                const newText = button.getAttribute(translationKey);
+                if (button.textContent !== newText) {
+                    button.textContent = newText;
+                }
             }
         });
 
-        // Update input values for all inputs with value-xx attributes
+        // Update inputs
         document.querySelectorAll('input[value][value-' + newLang + ']').forEach(function(input) {
-            var newValue = input.getAttribute('value-' + newLang);
-            if (typeof newValue === 'string') {
+            const newValue = input.getAttribute('value-' + newLang);
+            if (typeof newValue === 'string' && input.value !== newValue) {
                 input.value = newValue;
             }
         });
-        // Optionally, reset to default if no value-xx exists
+        
         document.querySelectorAll('input[value]').forEach(function(input) {
             if (!input.hasAttribute('value-' + newLang)) {
-                var defaultValue = input.getAttribute('value');
-                if (typeof defaultValue === 'string') {
+                const defaultValue = input.getAttribute('value');
+                if (typeof defaultValue === 'string' && input.value !== defaultValue) {
                     input.value = defaultValue;
                 }
             }

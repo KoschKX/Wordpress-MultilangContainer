@@ -1,8 +1,38 @@
 (function() {
+	// Helper to mark all internal links for processing
+	function markInternalLinks() {
+		var siteUrl = window.location.hostname;
+		var links = document.querySelectorAll('a:not([data-multilang-link]):not([data-multilang-external])');
+		links.forEach(function(link) {
+			var href = link.getAttribute('href');
+			if (!href) return;
+			
+			// Check if internal link (relative or same domain)
+			if (href.startsWith('/') || href.startsWith('./') || href.startsWith('?') || href.startsWith('#')) {
+				link.setAttribute('data-multilang-link', 'true');
+			} else if (href.startsWith('http')) {
+				try {
+					var url = new URL(href);
+					if (url.hostname === siteUrl) {
+						link.setAttribute('data-multilang-link', 'true');
+					} else {
+						link.setAttribute('data-multilang-external', 'true');
+					}
+				} catch (e) {
+					link.setAttribute('data-multilang-external', 'true');
+				}
+			}
+		});
+	}
+
 	// Helper to update all internal links with current ?lang=xx
 	function updateInternalLinks(lang) {
 		var flags = document.querySelector('.multilang-flags');
 		var defaultLang = window.multilangLangBar && window.multilangLangBar.defaultLang ? window.multilangLangBar.defaultLang : 'en';
+		
+		// First, mark any new links
+		markInternalLinks();
+		
 		var links = document.querySelectorAll("a[data-multilang-link]");
 		links.forEach(function(link) {
 			// Skip links inside the language bar
@@ -46,7 +76,23 @@
 		var currentLang = params.get('lang') || cookieLang || defaultLang;
 		if (!useQueryString) return;
 		var observer = new MutationObserver(function(mutations) {
-			updateInternalLinks(currentLang);
+			// Check if new links were added
+			var hasNewLinks = false;
+			mutations.forEach(function(mutation) {
+				if (mutation.addedNodes.length > 0) {
+					mutation.addedNodes.forEach(function(node) {
+						if (node.nodeType === 1) { // Element node
+							if (node.tagName === 'A' || node.querySelector('a')) {
+								hasNewLinks = true;
+							}
+						}
+					});
+				}
+			});
+			if (hasNewLinks) {
+				markInternalLinks();
+				updateInternalLinks(currentLang);
+			}
 		});
 		observer.observe(document.body, { childList: true, subtree: true });
 	}
@@ -75,6 +121,8 @@
 			}
 			history.replaceState(null, '', cleanUrl);
 		}
+		// Mark and update all internal links
+		markInternalLinks();
 		updateInternalLinks(currentLang);
 		// Start observer to catch dynamic content
 		startLinkObserver();

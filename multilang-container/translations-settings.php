@@ -8,30 +8,73 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Get the path to translations JSON file
-function get_translations_file_path() {
-    return plugin_dir_path(__FILE__) . 'data/';
-}
-
 // Load translations from JSON file
-function load_translations() {
-    $file_path = get_translations_file_path();
-    if (!file_exists($file_path)) {
-        return array();
+if (!function_exists('load_translations')) {
+    function load_translations() {
+        // Use static cache to avoid loading on every call
+        static $translations_cache = null;
+        
+        if ($translations_cache !== null) {
+            return $translations_cache;
+        }
+        
+        $languages = get_multilang_available_languages();
+        $translations = array();
+        
+        // First try to load structure file
+        $structure_path = get_structure_file_path();
+        $structure = array();
+        if (file_exists($structure_path)) {
+            $structure_content = file_get_contents($structure_path);
+            $structure = json_decode($structure_content, true) ?: array();
+        }
+        
+        // Load each language file and combine with structure
+        foreach ($languages as $lang) {
+            $lang_file = get_language_file_path($lang);
+            if (file_exists($lang_file)) {
+                $lang_content = file_get_contents($lang_file);
+                $lang_data = json_decode($lang_content, true) ?: array();
+                
+                // Merge language data into structure
+                foreach ($lang_data as $category => $keys) {
+                    foreach ($keys as $key => $translation) {
+                        if (!isset($translations[$category])) {
+                            $translations[$category] = array();
+                            // Copy meta data from structure
+                            if (isset($structure[$category]['_selectors'])) {
+                                $translations[$category]['_selectors'] = $structure[$category]['_selectors'];
+                            }
+                            if (isset($structure[$category]['_collapsed'])) {
+                                $translations[$category]['_collapsed'] = $structure[$category]['_collapsed'];
+                            }
+                            if (isset($structure[$category]['_method'])) {
+                                $translations[$category]['_method'] = $structure[$category]['_method'];
+                            }
+                            if (isset($structure[$category]['_key_order'])) {
+                                $translations[$category]['_key_order'] = $structure[$category]['_key_order'];
+                            }
+                            if (isset($structure[$category]['_disabled'])) {
+                                $translations[$category]['_disabled'] = $structure[$category]['_disabled'];
+                            }
+                        }
+                        $translations[$category][$key][$lang] = $translation;
+                    }
+                }
+            }
+        }
+        
+        // Cache the result
+        $translations_cache = $translations;
+        
+        // Return sections in natural order
+        return $translations;
     }
-    
-    $json_content = file_get_contents($file_path);
-    $translations = json_decode($json_content, true);
-    
-    if (json_last_error() !== JSON_ERROR_NONE) {
-        return array();
-    }
-    
-    return $translations;
 }
 
 // Save translations to JSON file
 function save_translations($translations) {
+    // Use the function from utilities.php
     $file_path = get_translations_file_path();
     
     // Ensure data directory exists
@@ -47,11 +90,6 @@ function save_translations($translations) {
     }
     
     return file_put_contents($file_path, $json_content) !== false;
-}
-
-// Get available languages from plugin settings
-function get_multilang_available_languages() {
-    return get_option('multilang_container_languages', array('en'));
 }
 
 // Settings page content
