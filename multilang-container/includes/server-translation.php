@@ -186,13 +186,18 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
         return $content;
     }
     
-    // Remove disabled sections from translations if structure data is available
-    $structure_data = false;
-    if (function_exists('multilang_get_cached_structure_data')) {
-        $structure_data = multilang_get_cached_structure_data();
-    } else if (function_exists('load_structure_data')) {
-        $structure_data = load_structure_data();
+    // TTFB OPTIMIZATION: Use global structure data cache
+    global $multilang_structure_data_cache;
+    if (!isset($multilang_structure_data_cache)) {
+        if (function_exists('multilang_get_cached_structure_data')) {
+            $multilang_structure_data_cache = multilang_get_cached_structure_data();
+        } else if (function_exists('load_structure_data')) {
+            $multilang_structure_data_cache = load_structure_data();
+        } else {
+            $multilang_structure_data_cache = false;
+        }
     }
+    $structure_data = $multilang_structure_data_cache;
     $filtered_translations = $translations;
     if ($structure_data && is_array($structure_data)) {
         foreach ($filtered_translations as $section => $keys) {
@@ -213,17 +218,18 @@ function multilang_server_side_translate( $content, $force_lang = null ) {
 }
 
 function multilang_process_text_for_translations($html, $translations, $current_lang, $default_lang) {
-    // Set up structure data if not already done (single cached instance)
-    static $structure_data = null;
-    if ($structure_data === null) {
+    // TTFB OPTIMIZATION: Use global structure data cache to share across all functions
+    global $multilang_structure_data_cache;
+    if (!isset($multilang_structure_data_cache)) {
         if (function_exists('multilang_get_cached_structure_data')) {
-            $structure_data = multilang_get_cached_structure_data();
+            $multilang_structure_data_cache = multilang_get_cached_structure_data();
         } else if (function_exists('load_structure_data')) {
-            $structure_data = load_structure_data();
+            $multilang_structure_data_cache = load_structure_data();
         } else {
-            $structure_data = false;
+            $multilang_structure_data_cache = false;
         }
     }
+    $structure_data = $multilang_structure_data_cache;
     if (empty($translations) || strlen($html) < 100) {
         return $html; // Early return if translations are empty or HTML is too short
     }
@@ -841,6 +847,13 @@ function multilang_should_skip_element($element) {
         return $cache[$cache_key];
     }
     
+    // TTFB OPTIMIZATION: Early exit for common skip patterns
+    $tag_name = strtolower($element->nodeName);
+    if ($tag_name === 'script' || $tag_name === 'style' || $tag_name === 'code') {
+        $cache[$cache_key] = true;
+        return true;
+    }
+    
     $should_skip = false;
     $current_element = $element;
     
@@ -1156,6 +1169,20 @@ function multilang_start_page_buffer() {
     if ( !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest' ) {
         return;
     }
+    
+    // TTFB OPTIMIZATION: Early exit with full page cache
+    // Serve cached content immediately without any processing
+    $cache_key = multilang_get_page_cache_key();
+    if ($cache_key && function_exists('multilang_get_cache')) {
+        $cached = multilang_get_cache($cache_key, 1800); // 30 min cache
+        if ($cached !== false && is_string($cached) && strlen($cached) > 100) {
+            // Verify it's valid HTML before serving
+            if (strpos($cached, '<html') !== false || strpos($cached, '<!DOCTYPE') !== false) {
+                echo $cached;
+                exit; // CRITICAL: Stop all processing and serve immediately
+            }
+        }
+    }
     $structure_data = function_exists('multilang_get_cached_structure_data') ? multilang_get_cached_structure_data() : false;
     $has_server_sections = false;
     if ($structure_data && is_array($structure_data)) {
@@ -1279,6 +1306,11 @@ function multilang_process_entire_page($html) {
     }
 
     multilang_cache_fragments_from_html($processed_html, $cache_page_key, $structure_data);
+    
+    // TTFB OPTIMIZATION: Cache the full processed page for next request
+    if ($cache_page_key && function_exists('multilang_set_cache')) {
+        multilang_set_cache($cache_page_key, $processed_html);
+    }
 
     return $processed_html;
 }
@@ -1374,39 +1406,43 @@ function multilang_get_all_container_selectors() {
     static $all_selectors = null;
     if ($all_selectors === null) {
         $all_selectors = array();
-        // Use cached structure data only if function exists
-        if (function_exists('multilang_get_cached_structure_data')) {
-            $structure_data = multilang_get_cached_structure_data();
-            if ($structure_data && is_array($structure_data)) {
-                foreach ($structure_data as $category => $config) {
-                    if (is_array($config) && isset($config['_selectors'])) {
-                        $selectors = $config['_selectors'];
-                        if (is_array($selectors)) {
-                            $all_selectors = array_merge($all_selectors, $selectors);
-                        }
+        // TTFB OPTIMIZATION: Use global structure data cache
+        global $multilang_structure_data_cache;
+        if (!isset($multilang_structure_data_cache) && function_exists('multilang_get_cached_structure_data')) {
+            $multilang_structure_data_cache = multilang_get_cached_structure_data();
+        }
+        $structure_data = $multilang_structure_data_cache;
+        if ($structure_data && is_array($structure_data)) {
+            foreach ($structure_data as $category => $config) {
+                if (is_array($config) && isset($config['_selectors'])) {
+                    $selectors = $config['_selectors'];
+                    if (is_array($selectors)) {
+                        $all_selectors = array_merge($all_selectors, $selectors);
                     }
                 }
-                $all_selectors = array_unique($all_selectors);
             }
+            $all_selectors = array_unique($all_selectors);
         }
     }
     return $all_selectors;
 }
 
 function multilang_css_to_xpath($selector) {
+    // TTFB OPTIMIZATION: Cache XPath conversions to avoid repeated transformations
+    static $xpath_cache = array();
+    if (isset($xpath_cache[$selector])) {
+        return $xpath_cache[$selector];
+    }
+    
+    $result = null;
+    
     if (preg_match('/^\.([a-zA-Z0-9_-]+)$/', $selector, $matches)) {
-        return "//*[contains(concat(' ', normalize-space(@class), ' '), ' " . $matches[1] . " ')]";
-    }
-    
-    if (preg_match('/^#([a-zA-Z0-9_-]+)$/', $selector, $matches)) {
-        return "//*[@id='" . $matches[1] . "']";
-    }
-    
-    if (preg_match('/^[a-zA-Z0-9]+$/', $selector)) {
-        return "//" . $selector;
-    }
-    
-    if (preg_match('/^(\.[a-zA-Z0-9_-]+)+$/', $selector)) {
+        $result = "//*[contains(concat(' ', normalize-space(@class), ' '), ' " . $matches[1] . " ')]";
+    } elseif (preg_match('/^#([a-zA-Z0-9_-]+)$/', $selector, $matches)) {
+        $result = "//*[@id='" . $matches[1] . "']";
+    } elseif (preg_match('/^[a-zA-Z0-9]+$/', $selector)) {
+        $result = "//" . $selector;
+    } elseif (preg_match('/^(\.[a-zA-Z0-9_-]+)+$/', $selector)) {
         $classes = explode('.', ltrim($selector, '.'));
         $xpath = "//*";
         foreach ($classes as $class) {
@@ -1414,10 +1450,11 @@ function multilang_css_to_xpath($selector) {
                 $xpath .= "[contains(concat(' ', normalize-space(@class), ' '), ' " . $class . " ')]";
             }
         }
-        return $xpath;
+        $result = $xpath;
     }
     
-    return null;
+    $xpath_cache[$selector] = $result;
+    return $result;
 }
 
 /**

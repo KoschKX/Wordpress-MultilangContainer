@@ -30,6 +30,13 @@ function multilang_hide_non_current_language($content) {
         return $content;
     }
     
+    // TTFB OPTIMIZATION: Check cache to avoid processing same content multiple times
+    static $processed_cache = array();
+    $content_hash = md5($content);
+    if (isset($processed_cache[$content_hash])) {
+        return $processed_cache[$content_hash];
+    }
+    
     $current_lang = multilang_get_current_language();
     if (!$current_lang) {
         return $content;
@@ -65,6 +72,10 @@ function multilang_hide_non_current_language($content) {
         },
         $content
     );
+    
+    // TTFB OPTIMIZATION: Cache the result
+    $processed_cache[$content_hash] = $content;
+    
     return $content;
 }
 
@@ -115,4 +126,14 @@ function multilang_hide_filter_final_processing() {
     });
 }
 
-add_action('init', 'multilang_hide_filter_final_processing', 1);
+// Start output buffer EXTREMELY early - before init, before caching plugins
+// plugins_loaded fires after all plugins are loaded but before init
+// DISABLED for TTFB optimization - causes multiple nested buffers
+// add_action('plugins_loaded', 'multilang_hide_filter_final_processing', 0); // Priority 0 = FIRST
+
+// Start output buffer VERY early (priority 1) to capture before caching plugins
+// DISABLED for TTFB optimization - causes multiple nested buffers
+// add_action('init', 'multilang_hide_filter_final_processing', 1);
+
+// Also hook at 'template_redirect' as backup in case 'init' is too early
+add_action('template_redirect', 'multilang_hide_filter_final_processing', 1);

@@ -25,6 +25,18 @@ if (defined('DOING_AJAX') && DOING_AJAX) {
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 
+// TTFB OPTIMIZATION: Preload critical data into static caches BEFORE any output
+add_action('plugins_loaded', function() {
+    // Warm up static caches to avoid cold-start delays
+    if (!is_admin() && !wp_doing_ajax()) {
+        get_multilang_available_languages();
+        get_multilang_default_language();
+        if (function_exists('multilang_get_options')) {
+            multilang_get_options();
+        }
+    }
+}, 1);
+
 // Load translations functions BEFORE server-translation.php (dependency)
 require_once plugin_dir_path(__FILE__) . 'translations-settings.php';
 
