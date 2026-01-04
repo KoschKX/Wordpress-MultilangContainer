@@ -56,7 +56,8 @@
 
     function isHideFilterActive() {
         const now = Date.now();
-        if (performanceCache.hideFilterActive !== null && (now - performanceCache.hideFilterCheckedAt) < 1000) {
+        // Reduce cache time to 100ms for faster initial updates
+        if (performanceCache.hideFilterActive !== null && (now - performanceCache.hideFilterCheckedAt) < 100) {
             return performanceCache.hideFilterActive;
         }
 
@@ -183,12 +184,14 @@
         defaultLangTranslations = languageCache[defaultLang] || {};
 
         setupLanguageSwitching();
+        
+        // Always run translations immediately to prevent title flash
+        runTranslations();
+        
+        // Also run on DOMContentLoaded if still loading to catch dynamic content
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', runTranslations);
-        } else {
-            runTranslations();
         }
-       //runTranslations();
 
         document.addEventListener('multilangBarReady', function(e) {
             setupLanguageSwitching();
@@ -202,7 +205,8 @@
         }, 2000);
     }
 
-    setTimeout(initializeImmediately, 100);
+    // Run immediately without delay to prevent title flash
+    initializeImmediately();
 
     function setupLanguageSwitching() {
         setTimeout(function() {
