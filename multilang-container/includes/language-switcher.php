@@ -120,12 +120,13 @@ function multilang_generate_langbar() {
     $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
     $refresh_on_switch = isset($options['language_switcher_refresh_on_switch']) ? $options['language_switcher_refresh_on_switch'] : 1;
 	$default_lang = get_multilang_default_language();
-    $langbar = '<ul class="multilang-flags" data-use-query-string="' . (($use_query_string && $query_string_enabled) ? '1' : '0') . '" data-refresh-on-switch="' . ($refresh_on_switch ? '1' : '0') . '">';
+    // Use the main "Enable query string language switching" option to control query strings
+    $langbar = '<ul class="multilang-flags" data-use-query-string="' . ($query_string_enabled ? '1' : '0') . '" data-refresh-on-switch="' . ($refresh_on_switch ? '1' : '0') . '">';
     foreach ($lang_flags as $lang) {
         $code = esc_attr($lang['code']);
         $name = esc_attr($lang['name']);
         if (in_array($code, $selected_langs)) {
-            if ($use_query_string && $query_string_enabled) {
+            if ($query_string_enabled) {
                 if ($code === $default_lang) {
                     // Default language: canonical link (no ?lang=xx), keep current URL and other query params
                     if (function_exists('remove_query_arg')) {

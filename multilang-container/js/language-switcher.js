@@ -1,4 +1,5 @@
 (function() {
+	
 	// Helper to mark all internal links for processing
 	function markInternalLinks() {
 		var siteUrl = window.location.hostname;
@@ -28,7 +29,11 @@
 	// Helper to update all internal links with current ?lang=xx
 	function updateInternalLinks(lang) {
 		var flags = document.querySelector('.multilang-flags');
+		var useQueryString = flags && flags.getAttribute('data-use-query-string') === '1';
 		var defaultLang = window.multilangLangBar && window.multilangLangBar.defaultLang ? window.multilangLangBar.defaultLang : 'en';
+		
+		// Only modify links if query string mode is enabled
+		if (!useQueryString) return;
 		
 		// First, mark any new links
 		markInternalLinks();
@@ -156,12 +161,9 @@
 		return code.split("-")[0].toLowerCase();
 	};
 
-	// Get switcher config
-	let useQueryString = false;
+	// Get default language (we'll get useQueryString after HTML is inserted)
 	let defaultLang = 'en';
 	if (window.multilangLangBar) {
-		const flags = document.querySelector('.multilang-flags');
-		useQueryString = flags && flags.getAttribute('data-use-query-string') === '1';
 		defaultLang = window.multilangLangBar.defaultLang || 'en';
 	}
 
@@ -170,12 +172,6 @@
 	if (!lng) { lng = document.documentElement.getAttribute("lang"); }
 	if (!lng) { lng = navigator.language || navigator.userLanguage || defaultLang; }
 	lng = normalizeLang(lng) || defaultLang;
-
-	// If query string switching is enabled and no ?lang is present, reload to default language (?lang=en)
-	if (useQueryString && !params.get('lang')) {
-		window.location.replace(window.location.pathname + '?lang=' + defaultLang);
-		return;
-	}
 
 	// Remove all language classes and add current one
 	document.body.className = document.body.className.replace(/\blang-[a-z]{2}\b/g, '').trim();
@@ -192,6 +188,19 @@
 		document.body.insertAdjacentHTML('beforeend', window.multilangLangBar.html);
 	}
 
+	// NOW read useQueryString AFTER the HTML is inserted
+	let useQueryString = false;
+	const flags = document.querySelector('.multilang-flags');
+	if (flags) {
+		useQueryString = flags.getAttribute('data-use-query-string') === '1';
+	}
+
+	// If query string switching is enabled and no ?lang is present, reload to default language (only for non-default lang)
+	if (useQueryString && !params.get('lang') && lng !== defaultLang) {
+		window.location.replace(window.location.pathname + '?lang=' + lng);
+		return;
+	}
+
 	// Language switcher click
 	document.querySelectorAll('.multilang-flags li').forEach(function(li) {
 		li.addEventListener('click', function(e) {
@@ -203,13 +212,14 @@
 			var defaultLang = window.multilangLangBar && window.multilangLangBar.defaultLang ? window.multilangLangBar.defaultLang : 'en';
 			var lang = a.getAttribute('hreflang');
 			lang = window.normalizeLang(lang);
+		
+		// Always update links immediately after switching
+		setTimeout(function() {
+			updateInternalLinks(lang);
+		}, 50);
 
-			// Always update links immediately after switching
-			setTimeout(function() {
-				updateInternalLinks(lang);
-			}, 50);
-
-			// Update the query string in the address bar
+		// Update the query string in the address bar ONLY if useQueryString is enabled
+		if (useQueryString) {
 			var url = new URL(window.location.href);
 			if (lang === defaultLang) {
 				url.searchParams.delete('lang');
@@ -230,8 +240,7 @@
 				}
 				history.replaceState(null, '', newUrl);
 			}
-
-			if (lang === defaultLang && useQueryString) {
+		}			if (lang === defaultLang && useQueryString) {
 				e.preventDefault();
 				if (refreshOnSwitch) {
 					window.location.href = href;
