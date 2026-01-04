@@ -244,11 +244,6 @@
 		var taglines = window.multilangPageTaglines || (window.multilangLangBar && window.multilangLangBar.pageTaglines);
 		var siteName = window.multilangLangBar && window.multilangLangBar.siteName;
 		
-		console.log('updatePageTitle called with lang:', lang);
-		console.log('titles:', titles);
-		console.log('taglines:', taglines);
-		console.log('siteName:', siteName);
-		
 		var newTitle = '';
 		if (titles && titles[lang]) {
 			newTitle = titles[lang];
@@ -273,9 +268,6 @@
 			}
 		}
 		
-		console.log('newTitle:', newTitle);
-		console.log('newTagline:', newTagline);
-		
 		// Build document title
 		var titleParts = [];
 		if (newTitle) {
@@ -290,7 +282,6 @@
 		
 		if (titleParts.length > 0) {
 			document.title = titleParts.join(' - ');
-			console.log('Updated document.title to:', document.title);
 		}
 		
 		updatePageHeadings(newTitle, newTagline);
