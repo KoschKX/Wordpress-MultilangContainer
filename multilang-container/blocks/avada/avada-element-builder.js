@@ -1,7 +1,5 @@
 (function($) {
 
-   
-
     jQuery(document).ready(function() {
         initMultilangElement();
     });
@@ -198,66 +196,64 @@
 
     }
 
-    function addLanguageSelector() {
-        // Check if we're in the nested columns modal
-        if (!$('.fusion-builder-modal-top-container:visible').length) return;
+    function addLanguageSelector(retryCount = 0) {
+        // Check if we're in the nested columns modal and it's visible
+        var $modal = $('.fusion-builder-modal-top-container:visible');
+        if (!$modal.length) {
+            // Retry up to 5 times with a short delay if modal isn't ready
+            if (retryCount < 5) {
+                setTimeout(function() {
+                    addLanguageSelector(retryCount + 1);
+                }, 100);
+            }
+            return;
+        }
 
-        // Check if selector already exists
-        if ($('#ml-language-selector').length > 0) return;
+        // Remove any stale selector (in case modal was rebuilt)
+        $modal.find('#ml-language-selector').remove();
 
-        avada_log('[addLanguageSelector] Adding language selector to modal...');
-
-        var languages = multilangAvadaData.available_languages;
-
+        var languages = multilangAvadaData && multilangAvadaData.available_languages;
         if (!languages || languages.length === 0) return;
 
         // Create the selector HTML
         var selectorHTML = '<div id="ml-language-selector" style="padding: 15px; background: #f5f5f5; border-bottom: 1px solid #ddd;">';
         selectorHTML += '<label style="margin-right: 10px; font-weight: bold;">Edit Language:</label>';
         selectorHTML += '<select id="ml-lang-dropdown" style="padding: 5px 10px; font-size: 14px;">';
-
-
         for (var i = 0; i < languages.length; i++) {
             var lang = languages[i].toUpperCase();
             selectorHTML += '<option value="' + languages[i] + '">' + lang + '</option>';
         }
-
-        // Add "All" option first
         selectorHTML += '<option value="all">ALL</option>';
-
         selectorHTML += '</select>';
         selectorHTML += '</div>';
 
         // Insert at the top of the modal
-        var $modal = $('.fusion-builder-modal-top-container:visible');
-        if ($modal.length > 0) {
-            $modal.prepend(selectorHTML);
-            $('.fusion-builder-modal-top-container').parent().addClass('ml-has-language-selector');
-            // Change the modal title to the element name from PHP
-            var elementName = multilangAvadaData.element_name || 'Multilang Container';
-            $modal.find('h2').text(elementName);
-            // Remove the "Add Columns" button from the bottom container
-            $('.fusion-builder-modal-bottom-container .fusion-builder-insert-inner-column').remove();
-            
-            // Filter out columns that aren't in available languages
-            if (currentMarkerID) {
-                $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').each(function() {
-                    var colLang = $(this).attr('data-lang');
-                    if (colLang && languages.indexOf(colLang) === -1) {
-                        // This column's language is not in available languages - hide it permanently
-                        $(this).hide().addClass('ml-invalid-lang');
-                    }
-                });
-            }
-            
-            // Add change event handler
-            $('#ml-lang-dropdown').on('change', function() {
-                var selectedLang = $(this).val();
-                filterColumnsByLanguage(selectedLang);
+        $modal.prepend(selectorHTML);
+        $modal.parent().addClass('ml-has-language-selector');
+        // Change the modal title to the element name from PHP
+        var elementName = multilangAvadaData.element_name || 'Multilang Container';
+        $modal.find('h2').text(elementName);
+        // Remove the "Add Columns" button from the bottom container
+        $('.fusion-builder-modal-bottom-container .fusion-builder-insert-inner-column').remove();
+
+        // Filter out columns that aren't in available languages
+        if (currentMarkerID) {
+            $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').each(function() {
+                var colLang = $(this).attr('data-lang');
+                if (colLang && languages.indexOf(colLang) === -1) {
+                    // This column's language is not in available languages - hide it permanently
+                    $(this).hide().addClass('ml-invalid-lang');
+                }
             });
-            // Initially show only the first language
-            filterColumnsByLanguage(languages[0]);
         }
+
+        // Add change event handler
+        $('#ml-lang-dropdown').on('change', function() {
+            var selectedLang = $(this).val();
+            filterColumnsByLanguage(selectedLang);
+        });
+        // Initially show only the first language
+        filterColumnsByLanguage(languages[0]);
     }
 
     function filterColumnsByLanguage(lang) {
@@ -364,7 +360,12 @@
         var bodyClassObserver = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-                    if (jQuery('body').hasClass('fusion-builder-enabled')) {
+                    if (jQuery('body').hasClass('fusion-builder-enabled') && window.fusionModalElType === 'multilang_avada') {
+                        setTimeout(function() {
+                            convertNestedColumns();
+                            addLanguageSelector();
+                        }, 100);
+                    } else if (jQuery('body').hasClass('fusion-builder-enabled')) {
                         setTimeout(function() {
                             convertNestedColumns();
                         }, 100);
@@ -380,9 +381,16 @@
         var fusionLayoutElement = document.getElementById('fusion_builder_layout');
         if (fusionLayoutElement) {
             var fusionBuilderObserver = new MutationObserver(function(mutations) {
-                setTimeout(function() {
-                    convertNestedColumns();
-                }, 0);
+                if (window.fusionModalElType === 'multilang_avada') {
+                    setTimeout(function() {
+                        convertNestedColumns();
+                        addLanguageSelector();
+                    }, 0);
+                } else {
+                    setTimeout(function() {
+                        convertNestedColumns();
+                    }, 0);
+                }
             });
             fusionBuilderObserver.observe(fusionLayoutElement, {
                 childList: true,
