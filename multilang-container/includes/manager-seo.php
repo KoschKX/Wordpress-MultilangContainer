@@ -73,19 +73,22 @@ function multilang_filter_avada_og_description($description) {
     if (empty($description)) {
         return $description;
     }
-    
+    // Remove any multilang_marker_* from the description
+    $description = preg_replace('/multilang_marker_[a-zA-Z0-9_-]+/', '', $description);
+    $description = trim($description);
+
     $post = get_queried_object();
     if (!isset($post->ID)) {
         return $description;
     }
-    
+
     // Get the excerpt for the current language
     $clean_excerpt = multilang_get_clean_seo_excerpt($post->ID);
-    
+
     if (!empty($clean_excerpt)) {
         return $clean_excerpt;
     }
-    
+
     return $description;
 }
 add_filter('awb_og_meta_description', 'multilang_filter_avada_og_description', 5);
@@ -97,6 +100,9 @@ function multilang_filter_seo_description($description) {
     if (empty($description)) {
         return $description;
     }
+    // Remove any multilang_marker_* from the description
+    $description = preg_replace('/multilang_marker_[a-zA-Z0-9_-]+/', '', $description);
+    $description = trim($description);
     
     // Get current language
     $current_lang = multilang_get_current_language();
