@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Options Tab
+ */
 
 if (!defined('ABSPATH')) {
     exit;

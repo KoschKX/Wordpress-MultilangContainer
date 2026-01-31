@@ -1,5 +1,5 @@
 <?php
-// Monitors cache folders and keeps in sync with external cache plugins
+// Watch cache folders and sync with other cache plugins
 
 if (!defined('ABSPATH')) {
     exit;
@@ -62,12 +62,12 @@ function multilang_init_cache_folder_monitor() {
 add_action('init', 'multilang_init_cache_folder_monitor', 999);
 
 function multilang_hook_wpfc_clear() {
-    // Clear multilang cache when WPFC clears cache
+    // Hook into WPFC cache clear events
     add_action('wpfc_clear_all_cache', 'multilang_clear_all_cache');
     add_action('wpfc_clear_cache_of_allsites', 'multilang_clear_all_cache');
     add_action('wpfc_delete_cache', 'multilang_clear_all_cache');
     
-    // Make sure AJAX requests aren't cached by WPFC (run early)
+    // Don't let WPFC cache AJAX requests
     add_filter('wpfc_is_cacheable', function($cacheable) {
         if (wp_doing_ajax()) {
             return false;
@@ -77,7 +77,7 @@ function multilang_hook_wpfc_clear() {
 }
 add_action('plugins_loaded', 'multilang_hook_wpfc_clear', 1);
 
-// Add hooks for other popular cache plugins
+// Hook into other popular cache plugins
 function multilang_hook_other_cache_plugins() {
     add_action('w3tc_flush_all', 'multilang_clear_all_cache');
     add_action('w3tc_flush_posts', 'multilang_clear_all_cache');
@@ -106,6 +106,7 @@ function multilang_init_cache_mtimes() {
 add_action('admin_init', 'multilang_init_cache_mtimes');
 
 function multilang_update_cache_mtimes_after_clear() {
+    // Update mtimes after clearing cache
     $folders = multilang_get_cache_folders_to_monitor();
     $mtimes = array();
     

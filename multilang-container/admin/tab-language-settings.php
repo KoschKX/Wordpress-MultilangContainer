@@ -1,8 +1,8 @@
 <?php
-
 /**
  * Render languages configuration tab
  */
+
 function multilang_render_languages_tab($active_tab, $lang_flags, $langs, $plugin_url) {
 	echo '<div id="tab-languages" class="multilang-tab-content" style="' . ($active_tab !== 'languages' ? 'display:none;' : '') . '">';
 	echo '<form method="post" style="background:#fff;padding:2em 2em 1em 2em;border-radius:1em;box-shadow:0 2px 16px rgba(0,0,0,0.07);">';

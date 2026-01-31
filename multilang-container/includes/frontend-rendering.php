@@ -1,16 +1,15 @@
 <?php
-/**
+/*
  * Multilang Container - Frontend Rendering
- * 
- * Manages how content is shown on live pages
+ * Handles how stuff shows up on the site
  */
 
-// Don't allow direct access to this file
+// Block direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-// Renders the multilang container block
+// Render the multilang container block
 function multilang_container_render( $attributes ) {
 	$texts = isset( $attributes['texts'] ) ? $attributes['texts'] : array();
 	$langs = get_option('multilang_container_languages', array_keys($texts));
@@ -35,7 +34,7 @@ function multilang_container_render( $attributes ) {
 	return $output;
 }
 
-// Replace 'lang-xx' class with 'translate lang-xx' in block HTML
+// Swap 'lang-xx' for 'translate lang-xx' in block HTML
 add_filter('render_block', function($block_content, $block) {
     if ($block['blockName'] === 'multilang/container') {
         $block_content = preg_replace('/(<div[^>]*class=["\'][^"\']*)\s*lang-([a-z]{2})(\s*)/i', '$1translate', $block_content, 1);
@@ -43,7 +42,7 @@ add_filter('render_block', function($block_content, $block) {
     return $block_content;
 }, 10, 2);
 
-// Fill empty language blocks with the default language content
+// Fill empty language blocks with default content
 add_filter('the_content', function($content) {
     if (is_admin()) {
         return $content;

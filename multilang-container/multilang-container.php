@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Prevent WP Fastest Cache from caching AJAX - run as early as possible
+// Block WP Fastest Cache from caching AJAX (run early)
 if (defined('DOING_AJAX') && DOING_AJAX) {
     if (!defined('DONOTCACHEPAGE')) {
         define('DONOTCACHEPAGE', true);
@@ -25,7 +25,7 @@ if (defined('DOING_AJAX') && DOING_AJAX) {
 require_once plugin_dir_path(__FILE__) . 'includes/utilities.php';
 require_once plugin_dir_path(__FILE__) . 'includes/cache-handler.php';
 
-// TTFB OPTIMIZATION: Preload critical data into static caches BEFORE any output
+// TTFB: Preload important stuff into static caches before output
 add_action('plugins_loaded', function() {
     // Warm up static caches to avoid cold-start delays
     if (!is_admin() && !wp_doing_ajax()) {
@@ -37,7 +37,7 @@ add_action('plugins_loaded', function() {
     }
 }, 1);
 
-// Load translations functions BEFORE server-translation.php (dependency)
+// Load translation functions before server-translation.php (dependency)
 require_once plugin_dir_path(__FILE__) . 'translations-settings.php';
 
 // Load frontend essentials only
@@ -52,10 +52,10 @@ require_once plugin_dir_path(__FILE__) . 'includes/manager-excerpt.php';
 require_once plugin_dir_path(__FILE__) . 'includes/manager-seo.php';
 require_once plugin_dir_path(__FILE__) . 'includes/multilang-hide-filter.php';
 
-// Load BLOCKS
+// Load block editor stuff
 require_once plugin_dir_path(__FILE__) . 'includes/editor-blocks.php';
 
-// Lazy-load admin files only when needed
+// Only load admin files if we're in the admin
 if (is_admin()) {
     require_once plugin_dir_path(__FILE__) . 'includes/cache-folder-monitor.php';
     
@@ -67,7 +67,7 @@ if (is_admin()) {
 }
 
 // Don't cache AJAX unless the user opts in
-// Run at priority 999 to ensure it runs AFTER WP Fastest Cache (which runs at priority 10)
+// Run late (priority 999) so it happens after WP Fastest Cache
 add_action('init', function() {
     if (wp_doing_ajax()) {
         // if (!function_exists('multilang_is_ajax_cache_enabled')) {
@@ -119,7 +119,7 @@ add_action('init', function() {
     }
 }, 999);
 
-// Exclude AJAX from WP Fastest Cache - run early to catch it before WPFC processes
+// Exclude AJAX from WP Fastest Cache (run early)
 add_filter('wpfc_exclude_current_page', function($exclude) {
     if (wp_doing_ajax()) {
         return true;
@@ -127,13 +127,13 @@ add_filter('wpfc_exclude_current_page', function($exclude) {
     return $exclude;
 }, 1);
 
-// Tell WP Fastest Cache to exclude specific AJAX actions
+// Tell WP Fastest Cache to exclude certain AJAX actions
 add_filter('wpfc_toolbar_exclude_ajax', function($actions) {
     $actions[] = 'get_fusion_blog';
     return $actions;
 }, 1, 1);
 
-// Ensure WP Fastest Cache creates separate cache files for each ?lang=xx variant
+// Make sure WP Fastest Cache creates separate cache files for each ?lang=xx
 add_action('init', function() {
     if (!is_admin()) {
         // Tell WPFC to vary cache by the 'lang' query parameter

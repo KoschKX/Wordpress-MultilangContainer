@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Hide Filter
+ */
 
 if (!defined('ABSPATH')) {
     exit;

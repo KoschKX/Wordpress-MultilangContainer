@@ -1,6 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // Attach switchTab to all tab links
-    
+ 
 });
 
 setupTabs();

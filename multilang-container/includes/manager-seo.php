@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - SEO Manager
+ */
 
 if (!defined('ABSPATH')) {
     exit;

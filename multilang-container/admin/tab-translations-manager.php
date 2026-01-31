@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Translations Manager Tab
+ */
 
 // AJAX handler to serve structure.json as JSON
 add_action('wp_ajax_get_structure_file', function() {

@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Server Translation
+ */
 
 if (!defined('ABSPATH')) {
     exit;

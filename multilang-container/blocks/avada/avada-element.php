@@ -1,23 +1,21 @@
 <?php
-/**
- * Multilang Container - Clean Avada Element
- * 
- * Simple, working Fusion Builder element for multilingual content
+/*
+ * Multilang Container - Avada Element
+ *
+ * Fusion Builder element for multilingual content
  */
 
-
-
-// Prevent direct access
+// Don't allow direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
-/**
- * Simple multilang container shortcode
- * Uses Gutenberg-style approach: parse existing content and rebuild with auto-fill
+/*
+ * Multilang container shortcode
+ * Parses and rebuilds content for each language
  */
 function multilang_avada_shortcode($atts) {
-    // Get available languages from plugin settings with error checking
+    // Grab available languages from plugin settings
     $available_languages = function_exists('get_multilang_available_languages') ? 
         get_multilang_available_languages() : array('en');
     
@@ -25,48 +23,48 @@ function multilang_avada_shortcode($atts) {
         $available_languages = array('en');
     }
     
-    // Get default language for fallback
+    // Pick a default language for fallback
     $default_language = function_exists('get_multilang_default_language') ? 
         get_multilang_default_language() : $available_languages[0];
     
-    // Setup defaults and merge with attributes
+    // Set up defaults and merge with shortcode attributes
     $atts = shortcode_atts(array(
         'css_class' => '', 
         'unique_id' => '',
         'content' => ''
     ), $atts);
     
-    // Deobfuscate and process content
+    // Deobfuscate and process the content
     $content = !empty($atts['content']) ? do_shortcode(deobfuscate($atts['content'])) : '';
     
-    // AGGRESSIVELY REMOVE ALL MARKER COLUMNS AND TEXT
+    // Remove all marker columns and marker text
     if (!empty($content)) {
-        // Remove fusion_text with multilang_marker text
+        // Remove fusion_text blocks that only have a marker
         $content = preg_replace('/\[fusion_text[^\]]*\].*?multilang_marker_.*?\[\/fusion_text\]/is', '', $content);
         
-        // Remove column_inner with multilang_marker class (with all its content)
+        // Remove column_inner blocks with a marker class (and all their content)
         $content = preg_replace('/\[fusion_builder_column_inner[^\]]*multilang_marker[^\]]*\].*?\[\/fusion_builder_column_inner\]/is', '', $content);
         
-        // Remove standalone multilang_marker text
+        // Optionally remove standalone marker text
         // $content = preg_replace('/multilang_marker_[a-zA-Z0-9_]+/', '', $content);
         
-        // Remove HTML divs/columns with multilang_marker class
+        // Optionally remove HTML divs/columns with marker class
         // $content = preg_replace('/<div[^>]*multilang_marker[^>]*>.*?<\/div>/is', '', $content);
         
-        // Remove fusion_column_inner with multilang_marker in class attribute  
+        // Optionally remove fusion_column_inner with marker in class attribute
         //$content = preg_replace('/<div[^>]*fusion-builder-column-inner[^>]*multilang_marker[^>]*>.*?<\/div>/is', '', $content);
         
-        // Clean up any double spaces or empty lines
+        // Clean up extra spaces and empty lines
         $content = preg_replace('/\s+/', ' ', $content);
         $content = trim($content);
     }
     
-    // Parse existing language content
+    // Parse the content for each language
     $language_blocks = array();
     $default_content = '';
     
     if (!empty($content)) {
-        // Use DOMDocument to parse
+        // Use DOMDocument to parse the HTML
         $dom = new DOMDocument();
         libxml_use_internal_errors(true);
         $dom->loadHTML('<?xml encoding="UTF-8">' . $content, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
@@ -74,22 +72,22 @@ function multilang_avada_shortcode($atts) {
         
         $xpath = new DOMXPath($dom);
         
-        // FIND THE FUSION-BUILDER-ROW-INNER THAT CONTAINS THE MULTILANG_MARKER
+        // Find the fusion-builder-row-inner that has a marker
         $marker_elements = $xpath->query('//*[contains(@class, "multilang_marker")]');
         
         $lang_divs = null;
         
         if ($marker_elements->length > 0) {
-            // Get the first marker
+            // Grab the first marker found
             $marker = $marker_elements->item(0);
             
-            // Find the nearest parent fusion-builder-row-inner
+            // Walk up to the nearest parent fusion-builder-row-inner
             $row_inner = $marker;
             $depth = 0;
             while ($row_inner && !preg_match('/fusion-builder-row-inner|fusion_builder_row_inner/', $row_inner->getAttribute('class'))) {
                 $row_inner = $row_inner->parentNode;
                 $depth++;
-                if ($depth > 10) break; // Safety
+                if ($depth > 10) break; // Prevent infinite loops
             }
             
             if ($row_inner) {
@@ -98,7 +96,7 @@ function multilang_avada_shortcode($atts) {
             }
         }
         
-        // Fallback: try old method
+        // Fallback: try the old method if nothing found
         if (!$lang_divs || $lang_divs->length === 0) {
             $wrapper = $xpath->query('//*[contains(@class, "multilang-wrapper")]')->item(0);
             $lang_divs = $wrapper ? 
@@ -108,7 +106,7 @@ function multilang_avada_shortcode($atts) {
         
         // Extract language content in one pass
         foreach ($lang_divs as $div) {
-            // Skip marker columns
+            // Skip columns that are just markers
             if (strpos($div->getAttribute('class'), 'multilang_marker') !== false) {
                 continue;
             }
@@ -116,7 +114,7 @@ function multilang_avada_shortcode($atts) {
             if (preg_match('/lang-([a-z]{2})/i', $div->getAttribute('class'), $matches)) {
                 $lang = $matches[1];
                 
-                // Build innerHTML directly
+                // Build the inner HTML for this language
                 $inner_html = '';
                 foreach ($div->childNodes as $child) {
                     $inner_html .= $dom->saveHTML($child);
@@ -158,13 +156,13 @@ function multilang_avada_shortcode($atts) {
         $content_to_use = '';
         
         if (isset($language_blocks[$lang])) {
-            // Check if existing content is empty
+            // Check if content is empty
             $text_content = trim(strip_tags($language_blocks[$lang]));
             if (empty($text_content) && !empty($default_content)) {
                 // Use fallback content
                 $content_to_use = $default_content;
             } else {
-                // Use existing content
+                // Use content
                 $content_to_use = $language_blocks[$lang];
             }
         } else if (!empty($default_content)) {

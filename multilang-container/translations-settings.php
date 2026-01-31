@@ -1,9 +1,9 @@
 <?php
-/**
- * Translations Settings Page for Multilang Container Plugin
+/*
+ * Translations Settings Page for Multilang Container
  */
 
-// Prevent direct access
+// Block direct access
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 // Load translations from JSON file
 if (!function_exists('load_translations')) {
     function load_translations() {
-        // Use static cache to avoid loading on every call
+        // Use static cache so we don't reload every time
         static $translations_cache = null;
         
         if ($translations_cache !== null) {
@@ -21,7 +21,7 @@ if (!function_exists('load_translations')) {
         $languages = get_multilang_available_languages();
         $translations = array();
         
-        // First try to load structure file
+        // Try to load the structure file first
         $structure_path = get_structure_file_path();
         $structure = array();
         if (file_exists($structure_path)) {
@@ -29,7 +29,7 @@ if (!function_exists('load_translations')) {
             $structure = json_decode($structure_content, true) ?: array();
         }
         
-        // Load each language file and combine with structure
+        // Load each language file and merge with structure
         foreach ($languages as $lang) {
             $lang_file = get_language_file_path($lang);
             if (file_exists($lang_file)) {

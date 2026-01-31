@@ -1,17 +1,13 @@
 <?php
-/**
+/*
  * Multilang Container - Language Switcher
- * 
- * Manages language detection, body classes, and switching between languages
- * 
- * PERFORMANCE OPTIMIZATION:
- * Link processing (appending ?lang=xx to internal links) is handled entirely
- * client-side via JavaScript. This eliminates expensive server-side regex operations,
- * removes output buffering overhead, and allows full page caching by WP Fastest Cache.
- * The result is significantly faster page loads, especially with ?lang=xx query strings.
+ * Handles language detection, body classes, and switching
+ *
+ * PERFORMANCE NOTE:
+ * All ?lang=xx link stuff is done in JS now for speed and better caching.
  */
 
-// Don't allow direct access to this file
+// Block direct access
 if (!defined('ABSPATH')) {
     exit;
 }
@@ -32,7 +28,7 @@ if (!function_exists('multilang_get_options')) {
     function multilang_get_options() {
         static $cached_options = null;
         
-        // Return cached version if available
+        // Use cached options if we have them
         if ($cached_options !== null) {
             return $cached_options;
         }
@@ -54,7 +50,7 @@ if (!function_exists('multilang_get_options')) {
 
 
 
-// Add the current language as a data attribute to the HTML tag
+// Add current language as a data attribute to <html>
 function lang_attribute( $output ) {
     $default_lang = get_multilang_default_language();
     $current_lang = $default_lang;
@@ -74,7 +70,7 @@ function lang_attribute( $output ) {
 }
 add_filter( 'language_attributes', 'lang_attribute' );
 
-// Add a language-specific class to the body tag
+// Add a lang-xx class to <body>
 function multilang_body_class_lang( $classes ) {
     $default_lang = get_multilang_default_language();
     $current_lang = $default_lang;
@@ -92,8 +88,8 @@ function multilang_body_class_lang( $classes ) {
 }
 add_filter( 'body_class', 'multilang_body_class_lang' );
 
-/**
- * Generate language bar HTML
+/*
+ * Build the language bar HTML
  */
 function multilang_generate_langbar() {
 	// Skip on backend operations
@@ -120,7 +116,7 @@ function multilang_generate_langbar() {
     $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
     $refresh_on_switch = isset($options['language_switcher_refresh_on_switch']) ? $options['language_switcher_refresh_on_switch'] : 1;
 	$default_lang = get_multilang_default_language();
-    // Use the main "Enable query string language switching" option to control query strings
+    // Use the main "Enable query string language switching" option
     $langbar = '<ul class="multilang-flags" data-use-query-string="' . ($query_string_enabled ? '1' : '0') . '" data-refresh-on-switch="' . ($refresh_on_switch ? '1' : '0') . '">';
     foreach ($lang_flags as $lang) {
         $code = esc_attr($lang['code']);
@@ -151,8 +147,8 @@ function multilang_generate_langbar() {
 	return $langbar;
 }
 
-/**
- * Get language bar data for JavaScript
+/*
+ * Get language bar data for JS
  */
 function multilang_get_langbar_data() {
 	return array(
@@ -162,8 +158,8 @@ function multilang_get_langbar_data() {
 	);
 }
 
-/**
- * Enqueue language switcher JavaScript
+/*
+ * Enqueue language switcher JS
  */
 function multilang_enqueue_language_switcher() {
     if ( multilang_is_backend_operation() ) {
@@ -180,12 +176,11 @@ function multilang_enqueue_language_switcher() {
 }
 add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
 
-/* QUERY STRING */
+// --- QUERY STRING HANDLING ---
 
-    // Note: All link processing is now handled client-side via JavaScript for better performance
-    // The expensive server-side regex operations have been removed
+    // NOTE: All link processing is now done in JS for better performance
 
-    // Detect ?lang=xx in query string and set cookie (server-side) ONLY if enabled in options
+    // Detect ?lang=xx in query string and set cookie (server-side) ONLY if enabled
     add_action('init', function() {
         $options = function_exists('multilang_get_options') ? multilang_get_options() : array();
         $query_string_enabled = isset($options['language_query_string_enabled']) && $options['language_query_string_enabled'];
@@ -197,7 +192,7 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
                 setcookie('lang', $lang, time() + 365*24*60*60, '/');
                 $_COOKIE['lang'] = $lang; // For immediate use in this request
                 
-                // Add Vary header to help caching systems differentiate by query string
+                // Add Vary header so caches know to treat by query string
                 if (!is_admin()) {
                     add_action('send_headers', function() {
                         header('Vary: Cookie', false);
@@ -215,7 +210,7 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
         return $query_strings;
     });
     add_filter('wp_include_query_strings', function($query_strings) {
-        // Ensure 'lang' is included for cache differentiation
+        // Make sure 'lang' is included for cache differentiation
         $query_strings[] = 'lang';
         $query_strings = array_unique($query_strings);
         return $query_strings;
@@ -243,5 +238,5 @@ add_action('wp_enqueue_scripts', 'multilang_enqueue_language_switcher', 11);
     });
 
 
-    // Links are now processed client-side via JavaScript - no server-side filters needed
-    // This improves caching and performance significantly
+    // Links are now processed client-side in JS - no server-side filters needed
+    // This is way better for caching and speed

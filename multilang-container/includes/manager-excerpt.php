@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Excerpt Manager
+ */
 
 if (!defined('ABSPATH')) {
     exit;

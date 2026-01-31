@@ -1,8 +1,8 @@
 <?php
-
-/**
- * Generate CSS directly - no bullshit version
+/*
+ * Multilang Container - Utilities Admin
  */
+
 function multilang_generate_css($langs) {
 	$css = "";
 

@@ -1,5 +1,5 @@
 <?php
-// Handles caching for translated content using files
+// Handles caching for translated content (file-based)
 
 if (!defined('ABSPATH')) {
     exit;
@@ -13,10 +13,7 @@ function multilang_is_cache_debug_logging_enabled() {
     return false;
 }
 
-
-
-
-// Store fragments of HTML in JSON files for caching
+// Store HTML fragments in JSON files for caching
 function multilang_get_fragment_cache_file($cache_key) {
     $cache_dir = multilang_get_cache_dir();
     $safe_key = sanitize_file_name($cache_key);
@@ -24,7 +21,7 @@ function multilang_get_fragment_cache_file($cache_key) {
 }
 
 function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
-    // Don't cache anything on the <body> or <html> tags, or their direct children
+    // Don't cache <body>, <html>, or their direct children
     $selector_trim = trim(strtolower($selector));
     if (
         $selector_trim === 'body' ||
@@ -32,14 +29,14 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
         strpos($selector_trim, 'body ') === 0 ||
         strpos($selector_trim, 'html ') === 0
     ) {
-        // Skip caching for these selectors
+        // Skip these selectors
         return false;
     }
 
-    // Check if the fragment is the <body>, <html>, or a direct child of those tags
+    // Also skip if the fragment is <body>, <html>, or a direct child
     if (is_string($fragment)) {
         $fragment_trim = ltrim($fragment);
-        // If the fragment starts with <body> or <html>, don't cache it
+        // Don't cache if fragment starts with <body> or <html>
         if (stripos($fragment_trim, '<body') === 0 || stripos($fragment_trim, '<html') === 0) {
             return false;
         }
@@ -52,7 +49,7 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
             if ($root && ($root->nodeName === 'body' || $root->nodeName === 'html')) {
                 return false;
             }
-            // If the fragment is a single element, check if its parent would be body or html
+            // If fragment is a single element, check if its parent would be body or html
             $xpath = new DOMXPath($dom);
             $nodes = $xpath->query('/*[1]');
             if ($nodes->length === 1) {
@@ -70,7 +67,7 @@ function multilang_set_fragment_cache($cache_key, $selector, $fragment) {
         $content = file_get_contents($file);
         $data = json_decode($content, true) ?: array();
     }
-    // Save the full HTML for the selected element, including all language spans
+    // Save the full HTML for this selector (all language spans included)
     $data[$selector] = $fragment;
     file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     return true;
@@ -120,11 +117,13 @@ function multilang_get_cache_dir() {
         
         $htaccess_file = $cache_dir . '.htaccess';
         if (!file_exists($htaccess_file)) {
+            // Block direct access to cache files
             file_put_contents($htaccess_file, "# Protect cache directory\n<Files \"*.cache\">\n    Require all denied\n</Files>");
         }
         
         $index_file = $cache_dir . 'index.php';
         if (!file_exists($index_file)) {
+            // Silence is golden
             file_put_contents($index_file, "<?php\n// Silence is golden.\n");
         }
     }
@@ -145,6 +144,7 @@ function multilang_get_cache($cache_key, $expiration = 3600) {
         return false;
     }
     
+    // Expire cache if too old
     if ($expiration > 0) {
         $file_time = filemtime($cache_file);
         if ((time() - $file_time) > $expiration) {
@@ -171,7 +171,7 @@ function multilang_set_cache($cache_key, $data) {
     $cache_logged_in = isset($json_options['cache_logged_in']) ? intval($json_options['cache_logged_in']) : 0;
     if (function_exists('is_user_logged_in') && is_user_logged_in()) {
       if (is_string($data)) {
-            // Remove admin bar markup and related scripts from HTML when caching for logged-in users
+            // Remove admin bar markup/scripts from HTML for logged-in users
             // Remove <div id="wpadminbar"> ... </div>
             $data = preg_replace('/<div id="wpadminbar"[\s\S]*?<\/div>/i', '', $data);
             // Remove admin bar <script> blocks
@@ -200,6 +200,7 @@ function multilang_clear_all_cache() {
     $cache_dir = multilang_get_cache_dir();
     $deleted_count = 0;
     
+    // Log cache clear if debug enabled
     if (multilang_is_cache_debug_logging_enabled()) {
         error_log('[Multilang Cache] Cache cleared');
     }
@@ -208,6 +209,7 @@ function multilang_clear_all_cache() {
         return 0;
     }
     
+    // Remove all .cache and .fragments.json files
     $patterns = [
         $cache_dir . '*.cache',
         $cache_dir . '*.fragments.json'
@@ -233,6 +235,7 @@ function multilang_clear_all_cache() {
 
 function multilang_get_cache_info() {
     $cache_dir = multilang_get_cache_dir();
+    // Info about cache files
     $info = array(
         'count' => 0,
         'size' => 0,

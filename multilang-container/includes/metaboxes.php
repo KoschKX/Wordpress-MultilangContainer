@@ -1,4 +1,7 @@
 <?php
+/*
+ * Multilang Container - Metaboxes
+ */
 
 if (!defined('ABSPATH')) {
     exit;
