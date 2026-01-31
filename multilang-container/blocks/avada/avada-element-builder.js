@@ -196,26 +196,14 @@
 
     }
 
-    function addLanguageSelector(retryCount = 0) {
-        // Check if we're in the nested columns modal and it's visible
+    function addLanguageSelector() {
         var $modal = $('.fusion-builder-modal-top-container:visible');
-        if (!$modal.length) {
-            // Retry up to 5 times with a short delay if modal isn't ready
-            if (retryCount < 5) {
-                setTimeout(function() {
-                    addLanguageSelector(retryCount + 1);
-                }, 100);
-            }
-            return;
-        }
+        if (!$modal.length) return;
 
-        // Remove any stale selector (in case modal was rebuilt)
-        $modal.find('#ml-language-selector').remove();
-
+        // Only add the selector if it doesn't already exist
+        if ($modal.find('#ml-language-selector').length > 0) return;
         var languages = multilangAvadaData && multilangAvadaData.available_languages;
         if (!languages || languages.length === 0) return;
-
-        // Create the selector HTML
         var selectorHTML = '<div id="ml-language-selector" style="padding: 15px; background: #f5f5f5; border-bottom: 1px solid #ddd;">';
         selectorHTML += '<label style="margin-right: 10px; font-weight: bold;">Edit Language:</label>';
         selectorHTML += '<select id="ml-lang-dropdown" style="padding: 5px 10px; font-size: 14px;">';
@@ -226,54 +214,50 @@
         selectorHTML += '<option value="all">ALL</option>';
         selectorHTML += '</select>';
         selectorHTML += '</div>';
-
-        // Insert at the top of the modal
         $modal.prepend(selectorHTML);
         $modal.parent().addClass('ml-has-language-selector');
-        // Change the modal title to the element name from PHP
         var elementName = multilangAvadaData.element_name || 'Multilang Container';
         $modal.find('h2').text(elementName);
-        // Remove the "Add Columns" button from the bottom container
+        // Remove the "Add Columns" button from the bottom area
         $('.fusion-builder-modal-bottom-container .fusion-builder-insert-inner-column').remove();
-
-        // Filter out columns that aren't in available languages
+        // Hide columns that aren't in the available languages list
         if (currentMarkerID) {
             $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').each(function() {
                 var colLang = $(this).attr('data-lang');
                 if (colLang && languages.indexOf(colLang) === -1) {
-                    // This column's language is not in available languages - hide it permanently
                     $(this).hide().addClass('ml-invalid-lang');
                 }
             });
         }
-
-        // Add change event handler
-        $('#ml-lang-dropdown').on('change', function() {
+        // Attach the change event for the dropdown
+        $('#ml-lang-dropdown').off('change.multilang').on('change.multilang', function() {
             var selectedLang = $(this).val();
             filterColumnsByLanguage(selectedLang);
         });
-        // Initially show only the first language
-        filterColumnsByLanguage(languages[0]);
+        // Set the initial filter based on the dropdown's value
+        var initialLang = $('#ml-lang-dropdown').val() || languages[0];
+        filterColumnsByLanguage(initialLang);
+        $('#ml-lang-dropdown').val(initialLang);
     }
 
     function filterColumnsByLanguage(lang) {
-        // console.log('[filterColumnsByLanguage] Filtering for: ' + lang);
-        
-        var languages = multilangAvadaData.available_languages || [];
-        
+        var languages = multilangAvadaData && multilangAvadaData.available_languages || [];
+        // Hide all language columns first to avoid overlap
+        if (currentMarkerID) {
+            $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').hide();
+        } else {
+            $('.fusion-builder-column-inner[data-lang]').hide();
+        }
         // If "all" is selected, show all valid language columns
         if (lang === 'all') {
             if (currentMarkerID) {
-                // Show all columns that have valid languages
                 $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').each(function() {
                     var colLang = $(this).attr('data-lang');
-                    // Only show if language is in available languages list
                     if (colLang && languages.indexOf(colLang) !== -1) {
                         $(this).show();
                     }
                 });
             } else {
-                // Fallback - show all valid language columns
                 $('.fusion-builder-column-inner[data-lang]').each(function() {
                     var colLang = $(this).attr('data-lang');
                     if (colLang && languages.indexOf(colLang) !== -1) {
@@ -284,17 +268,8 @@
         } else {
             // Show only the selected language
             if (currentMarkerID) {
-                // Hide all language columns with this marker
-                $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang]').each(function() {
-                    $(this).hide();
-                });
-                // Show only the selected language column with this marker
                 $('.fusion-builder-column-inner[data-ml-marker="' + currentMarkerID + '"][data-lang="' + lang + '"]').show();
             } else {
-                // Fallback to old method (less specific - may affect other elements)
-                $('.fusion-builder-column-inner[data-lang]').each(function() {
-                    $(this).hide();
-                });
                 $('.fusion-builder-column-inner[data-lang="' + lang + '"]').show();
             }
         }
