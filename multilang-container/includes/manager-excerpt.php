@@ -7,6 +7,43 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+if (!function_exists('multilang_get_options_file_path')) {
+    function multilang_get_options_file_path() {
+        $upload_dir = wp_upload_dir();
+        $multilang_dir = trailingslashit($upload_dir['basedir']) . 'multilang/';
+        if (!is_dir($multilang_dir)) {
+            wp_mkdir_p($multilang_dir);
+        }
+        return $multilang_dir . 'options.json';
+    }
+}
+
+if (!function_exists('multilang_get_options')) {
+    function multilang_get_options() {
+        $file_path = multilang_get_options_file_path();
+        if (!file_exists($file_path)) {
+            return array();
+        }
+        $json_content = file_get_contents($file_path);
+        $options = json_decode($json_content, true);
+        return is_array($options) ? $options : array();
+    }
+}
+
+if (!function_exists('multilang_get_excerpt_line_limit_style')) {
+    function multilang_get_excerpt_line_limit_style() {
+        $options = multilang_get_options();
+        $enabled = isset($options['excerpt_line_limit_enabled']) ? (int) $options['excerpt_line_limit_enabled'] : 0;
+        $limit = isset($options['excerpt_line_limit']) ? absint($options['excerpt_line_limit']) : 0;
+
+        if ($enabled !== 1 || $limit <= 0) {
+            return '';
+        }
+
+        return ' style="display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:' . $limit . ';overflow:hidden;"';
+    }
+}
+
 function multilang_get_formatted_excerpt($post_id = null) {
     // Skip on backend operations
     if (is_admin() || wp_doing_ajax() || wp_doing_cron()) {
@@ -34,7 +71,8 @@ function multilang_get_formatted_excerpt($post_id = null) {
     }
     
     // Build excerpt HTML with language wrappers
-    $formatted_excerpt = '<p class="multilang-wrapper">';
+    $style_attr = multilang_get_excerpt_line_limit_style();
+    $formatted_excerpt = '<p class="multilang-wrapper"' . $style_attr . '>';
     $all_langs = array();
   
     if (function_exists('get_option')) {
@@ -144,8 +182,10 @@ if (!function_exists('multilang_clean_auto_excerpt')) {
 
 add_filter('get_the_excerpt', 'multilang_use_translated_excerpt', 5);
 add_filter('get_the_excerpt', 'multilang_clean_excerpt_content', 999);
+add_filter('get_the_excerpt', 'multilang_apply_excerpt_line_limit', 1000);
 add_filter('wp_trim_excerpt', 'multilang_clean_auto_excerpt', 10, 2);
 add_filter('the_excerpt', 'multilang_clean_excerpt_content', 999);
+add_filter('the_excerpt', 'multilang_apply_excerpt_line_limit', 1000);
 
 if (!function_exists('multilang_use_translated_excerpt')) {
     function multilang_use_translated_excerpt($excerpt) {
@@ -160,6 +200,25 @@ if (!function_exists('multilang_use_translated_excerpt')) {
         }
         
         return $excerpt;
+    }
+}
+
+if (!function_exists('multilang_apply_excerpt_line_limit')) {
+    function multilang_apply_excerpt_line_limit($excerpt) {
+        if (is_admin() || wp_doing_ajax()) {
+            return $excerpt;
+        }
+
+        $style_attr = multilang_get_excerpt_line_limit_style();
+        if (empty($style_attr)) {
+            return $excerpt;
+        }
+
+        if (stripos($excerpt, '<p') !== false) {
+            return preg_replace('/<p(\s[^>]*)?>/i', '<p$1' . $style_attr . '>', $excerpt, 1);
+        }
+
+        return '<p class="multilang-wrapper"' . $style_attr . '>' . $excerpt . '</p>';
     }
 }
 
